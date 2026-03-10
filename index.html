@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Mini Terraria HTML5</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: sans-serif; }
+        canvas { display: block; background: #87CEEB; }
+        .instructions { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); color: white; padding: 10px; border-radius: 5px; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+<div class="instructions">
+    Seta Esq/Dir ou A/D: Mover | Espaço: Pular<br>
+    Botão Esquerdo: Quebrar | Botão Direito: Construir
+</div>
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// Configurações
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+const TILE_SIZE = 40;
+const GRAVITY = 0.8;
+
+// Estado do Jogo
+const world = {}; // Usamos um objeto para simular um mundo que pode crescer
+const player = {
+    x: 100, y: 100,
+    width: 30, height: 50,
+    velX: 0, velY: 0,
+    speed: 5,
+    jumpPower: -15,
+    onGround: false
+};
+
+const keys = {};
+
+// --- Geração Inicial do Terreno ---
+function generateWorld() {
+    const cols = Math.ceil(canvas.width / TILE_SIZE) + 10;
+    const rows = Math.ceil(canvas.height / TILE_SIZE);
+    
+    for (let x = -5; x < cols; x++) {
+        for (let y = 0; y < rows; y++) {
+            if (y > 8) { // Linha do horizonte
+                world[`${x},${y}`] = y === 9 ? 'grass' : 'dirt';
+            }
+        }
+    }
+}
+
+// --- Controles ---
+window.addEventListener("keydown", e => keys[e.code] = true);
+window.addEventListener("keyup", e => keys[e.code] = false);
