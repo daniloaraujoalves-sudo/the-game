@@ -2,58 +2,115 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria HTML5</title>
+    <title>Mini Terraria JS</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: sans-serif; }
-        canvas { display: block; background: #87CEEB; }
-        .instructions { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); color: white; padding: 10px; border-radius: 5px; pointer-events: none; }
+        canvas { display: block; background: #87CEEB; cursor: crosshair; }
+        .info { position: absolute; top: 10; left: 10; color: white; text-shadow: 1px 1px 2px black; pointer-events: none; }
     </style>
 </head>
 <body>
 
-<div class="instructions">
-    Seta Esq/Dir ou A/D: Mover | Espaço: Pular<br>
-    Botão Esquerdo: Quebrar | Botão Direito: Construir
-</div>
+<div class="info">WASD para mover | Clique para minerar</div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-// Configurações
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
-const TILE_SIZE = 40;
-const GRAVITY = 0.8;
 
-// Estado do Jogo
-const world = {}; // Usamos um objeto para simular um mundo que pode crescer
+// --- Configurações ---
+const TILE_SIZE = 40;
+const ROWS = Math.ceil(canvas.height / TILE_SIZE);
+const COLS = Math.ceil(canvas.width / TILE_SIZE);
+const GRAVITY = 0.5;
+
+// --- Mundo (0 = Ar, 1 = Grama, 2 = Terra) ---
+let world = [];
+for (let y = 0; y < ROWS; y++) {
+    world[y] = [];
+    for (let x = 0; x < COLS; x++) {
+        if (y > 10) world[y][x] = (y === 11) ? 1 : 2; 
+        else world[y][x] = 0;
+    }
+}
+
+// --- Jogador ---
 const player = {
     x: 100, y: 100,
-    width: 30, height: 50,
-    velX: 0, velY: 0,
+    w: 30, h: 50,
+    vx: 0, vy: 0,
     speed: 5,
-    jumpPower: -15,
+    jump: -10,
     onGround: false
 };
 
 const keys = {};
+window.onkeydown = (e) => keys[e.code] = true;
+window.onkeyup = (e) => keys[e.code] = false;
 
-// --- Geração Inicial do Terreno ---
-function generateWorld() {
-    const cols = Math.ceil(canvas.width / TILE_SIZE) + 10;
-    const rows = Math.ceil(canvas.height / TILE_SIZE);
-    
-    for (let x = -5; x < cols; x++) {
-        for (let y = 0; y < rows; y++) {
-            if (y > 8) { // Linha do horizonte
-                world[`${x},${y}`] = y === 9 ? 'grass' : 'dirt';
-            }
-        }
+// --- Mineração ---
+canvas.onmousedown = (e) => {
+    const gridX = Math.floor(e.clientX / TILE_SIZE);
+    const gridY = Math.floor(e.clientY / TILE_SIZE);
+    if (world[gridY]) world[gridY][gridX] = 0;
+};
+
+function update() {
+    // Controles
+    if (keys['KeyA']) player.vx = -player.speed;
+    else if (keys['KeyD']) player.vx = player.speed;
+    else player.vx = 0;
+
+    if (keys['KeyW'] && player.onGround) {
+        player.vy = player.jump;
+        player.onGround = false;
     }
+
+    // Física
+    player.vy += GRAVITY;
+    player.x += player.vx;
+    player.y += player.vy;
+
+    // Colisão simples com o chão (blocos)
+    player.onGround = false;
+    const pGridX = Math.floor((player.x + player.w/2) / TILE_SIZE);
+    const pGridY = Math.floor((player.y + player.h) / TILE_SIZE);
+
+    if (world[pGridY] && world[pGridY][pGridX] !== 0) {
+        player.y = pGridY * TILE_SIZE - player.h;
+        player.vy = 0;
+        player.onGround = true;
+    }
+
+    draw();
+    requestAnimationFrame(update);
 }
 
-// --- Controles ---
-window.addEventListener("keydown", e => keys[e.code] = true);
-window.addEventListener("keyup", e => keys[e.code] = false);
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Desenhar Blocos
+    for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+            if (world[y][x] === 1) ctx.fillStyle = '#228B22'; // Grama
+            else if (world[y][x] === 2) ctx.fillStyle = '#8B4513'; // Terra
+            else continue;
+
+            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+            ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+    }
+
+    // Desenhar Jogador
+    ctx.fillStyle = '#FF6347';
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+}
+
+update();
+</script>
+</body>
+</html>
