@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria - Alcance Limitado</title>
+    <title>Mini Terraria - Árvores com Texturas</title>
     <style>
         body { margin: 0; overflow: hidden; background: #4da0ff; font-family: sans-serif; }
         canvas { display: block; cursor: crosshair; }
@@ -17,8 +17,8 @@
 <body>
 
 <div class="info">
-    <b>ALCANCE LIMITADO:</b> Você só quebra blocos próximos.<br>
-    <b>WASD:</b> Mover | <b>Clique:</b> Minerar
+    <b>ÁRVORES TEXTURIZADAS:</b> Troncos e Folhas agora usam imagens.<br>
+    <b>WASD:</b> Mover | <b>Clique:</b> Minerar (Alcance Limitado)
 </div>
 <canvas id="gameCanvas"></canvas>
 
@@ -31,25 +31,33 @@ canvas.height = window.innerHeight;
 
 // --- Configurações ---
 const TILE_SIZE = 40;
-const REACH_DISTANCE = TILE_SIZE * 4; // Alcance de 4 blocos
-const DURABILITY = { 1: 5, 2: 5, 3: 20, 4: 10 };
+const REACH_DISTANCE = TILE_SIZE * 4;
+const DURABILITY = { 1: 5, 2: 5, 3: 20, 4: 10, 5: 10 }; // 4: Tronco, 5: Folha
 
 const WORLD_COLS = Math.ceil((canvas.width / TILE_SIZE) * 3);
 const WORLD_ROWS = Math.ceil((canvas.height / TILE_SIZE) * 3);
 const WORLD_WIDTH = WORLD_COLS * TILE_SIZE;
 const WORLD_HEIGHT = WORLD_ROWS * TILE_SIZE;
 
-// --- Carregamento (Simplificado para o exemplo) ---
+// --- Carregamento de Ativos ---
 let assetsLoaded = 0;
-const totalAssets = 3;
+const totalAssets = 5; // Grama, Terra, Pedra, Tronco, Folha
 function onAssetLoad() { if (++assetsLoaded === totalAssets) update(); }
 
 const imgGrama = new Image(); imgGrama.onload = onAssetLoad;
 imgGrama.src = "https://st2.depositphotos.com/1796420/8408/v/450/depositphotos_84083416-stock-illustration-texture-for-platformers-pixel-art.jpg";
+
 const imgTerra = new Image(); imgTerra.onload = onAssetLoad;
 imgTerra.src = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTRtCbeyZC6PjgiaDttQFYo4r4TUHIJFCdumA&s";
+
 const imgPedra = new Image(); imgPedra.onload = onAssetLoad;
 imgPedra.src = "https://i.pinimg.com/236x/d3/5c/0c/d35c0c58fff90987e9532e808ded0008.jpg";
+
+const imgTronco = new Image(); imgTronco.onload = onAssetLoad;
+imgTronco.src = "https://st2.depositphotos.com/1796420/8408/v/450/depositphotos_84083416-stock-illustration-texture-for-platformers-pixel-art.jpg";
+
+const imgFolha = new Image(); imgFolha.onload = onAssetLoad;
+imgFolha.src = "https://i.pinimg.com/1200x/09/c5/2d/09c52d89d8086495ab609332e6d55e85.jpg";
 
 // --- Mundos ---
 let world = [];
@@ -69,17 +77,20 @@ for (let y = 0; y < WORLD_ROWS; y++) {
 // Gerar Árvores
 for (let x = 2; x < WORLD_COLS - 2; x++) {
     if (Math.random() > 0.85) {
-        let h = 4;
-        for (let i = 1; i <= h; i++) treeWorld[15-i][x] = 4;
-        treeWorld[15-h-1][x] = 4; treeWorld[15-h-1][x-1] = 4; treeWorld[15-h-1][x+1] = 4;
-        // Resetar vida das árvores
-        for(let i=0; i<=h+1; i++) {
-            if(worldDamage[15-i]) {
-                worldDamage[15-i][x] = DURABILITY[4];
-                worldDamage[15-i][x-1] = DURABILITY[4];
-                worldDamage[15-i][x+1] = DURABILITY[4];
-            }
+        let h = 4; // Altura do tronco
+        for (let i = 1; i <= h; i++) {
+            treeWorld[15-i][x] = 4; // Tronco
+            worldDamage[15-i][x] = DURABILITY[4];
         }
+        // Folhas (Copa)
+        const leafY = 15 - h - 1;
+        const leafCoords = [[leafY, x], [leafY, x-1], [leafY, x+1], [leafY-1, x]];
+        leafCoords.forEach(([ly, lx]) => {
+            if (treeWorld[ly]) {
+                treeWorld[ly][lx] = 5;
+                worldDamage[ly][lx] = DURABILITY[5];
+            }
+        });
     }
 }
 
@@ -107,15 +118,12 @@ function isSolid(px, py) {
 
 function handleMining() {
     if (!isMouseDown) return;
-
-    // Calcular distância do centro do player até o mouse
     const pCenterX = player.x + player.w / 2;
     const pCenterY = player.y + player.h / 2;
     const dx = mousePos.x - pCenterX;
     const dy = mousePos.y - pCenterY;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
-    // Só minera se estiver dentro do alcance
     if (distance <= REACH_DISTANCE) {
         const gx = Math.floor(mousePos.x / TILE_SIZE);
         const gy = Math.floor(mousePos.y / TILE_SIZE);
@@ -162,21 +170,35 @@ function draw() {
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
-    // Céu
     ctx.fillStyle = '#87CEEB';
     ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
-    // Blocos e Árvores
     const sC = Math.floor(camera.x / TILE_SIZE);
     const eC = sC + Math.ceil(canvas.width / TILE_SIZE) + 1;
-    for (let y = 0; y < WORLD_ROWS; y++) {
+    const sR = Math.floor(camera.y / TILE_SIZE);
+    const eR = sR + Math.ceil(canvas.height / TILE_SIZE) + 1;
+
+    for (let y = sR; y < eR; y++) {
+        if (!world[y]) continue;
         for (let x = sC; x < eC; x++) {
-            if (treeWorld[y][x] === 4) {
-                ctx.fillStyle = '#5d4037';
-                ctx.globalAlpha = 0.6;
-                ctx.fillRect(x * TILE_SIZE + 12, y * TILE_SIZE, TILE_SIZE - 24, TILE_SIZE);
+            // Desenhar Árvores (Fundo)
+            if (treeWorld[y][x] !== 0) {
+                let tImg = treeWorld[y][x] === 4 ? imgTronco : imgFolha;
+                ctx.globalAlpha = 0.8;
+                // Troncos são desenhados um pouco mais finos que o tile
+                if (treeWorld[y][x] === 4) {
+                    ctx.drawImage(tImg, x * TILE_SIZE + 10, y * TILE_SIZE, TILE_SIZE - 20, TILE_SIZE);
+                } else {
+                    ctx.drawImage(tImg, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                }
                 ctx.globalAlpha = 1;
+
+                if (worldDamage[y][x] < DURABILITY[treeWorld[y][x]]) {
+                    ctx.fillStyle = `rgba(0,0,0,${1 - (worldDamage[y][x]/DURABILITY[treeWorld[y][x]])})`;
+                    ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                }
             }
+            // Desenhar Blocos (Frente)
             if (world[y][x] !== 0) {
                 let img = world[y][x] === 1 ? imgGrama : (world[y][x] === 2 ? imgTerra : imgPedra);
                 ctx.drawImage(img, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
@@ -188,14 +210,12 @@ function draw() {
         }
     }
 
-    // Indicador de Alcance (Círculo sutil)
     ctx.beginPath();
     ctx.arc(player.x + player.w/2, player.y + player.h/2, REACH_DISTANCE, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Jogador
     ctx.fillStyle = '#FF6347';
     ctx.fillRect(player.x, player.y, player.w, player.h);
 
