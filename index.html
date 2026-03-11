@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria - Montanhas Parallax</title>
+    <title>Mini Terraria - Montanhas e Subsolo</title>
     <style>
         body { margin: 0; overflow: hidden; background: #4da0ff; font-family: sans-serif; }
         canvas { display: block; cursor: crosshair; }
@@ -17,8 +17,8 @@
 <body>
 
 <div class="info">
-    <b>MONTANHAS ADICIONADAS:</b> Note como o fundo se move devagar.<br>
-    <b>WASD:</b> Mover | <b>Clique:</b> Minerar
+    <b>SUBSOLO ADICIONADO:</b> Paredes de fundo aparecem ao cavar.<br>
+    <b>Montanhas:</b> Agora estão bem mais altas no horizonte.
 </div>
 <canvas id="gameCanvas"></canvas>
 
@@ -29,13 +29,12 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// --- Configurações Mundo ---
 const TILE_SIZE = 40;
 const REACH_DISTANCE = TILE_SIZE * 4;
 const DURABILITY = { 1: 5, 2: 5, 3: 20, 4: 10, 5: 10 }; 
 
-const WORLD_COLS = 200; // Mundo bem largo para testar o parallax
-const WORLD_ROWS = 40;
+const WORLD_COLS = 200;
+const WORLD_ROWS = 60; // Mundo mais fundo
 const WORLD_WIDTH = WORLD_COLS * TILE_SIZE;
 const WORLD_HEIGHT = WORLD_ROWS * TILE_SIZE;
 
@@ -55,7 +54,7 @@ imgTronco.src = "https://i.pinimg.com/736x/10/61/7b/10617b804bd2581499fcbea14264
 const imgFolha = new Image(); imgFolha.onload = onAssetLoad;
 imgFolha.src = "https://i.pinimg.com/1200x/09/c5/2d/09c52d89d8086495ab609332e6d55e85.jpg";
 
-// --- Mundos e Árvores ---
+// --- Inicialização do Mundo ---
 let world = [];
 let worldDamage = [];
 let treeWorld = [];
@@ -64,15 +63,16 @@ for (let y = 0; y < WORLD_ROWS; y++) {
     world[y] = []; worldDamage[y] = []; treeWorld[y] = [];
     for (let x = 0; x < WORLD_COLS; x++) {
         treeWorld[y][x] = 0;
-        let type = (y === 15) ? 1 : (y > 15 && y < 25) ? 2 : (y >= 25) ? 3 : 0;
+        let type = (y === 15) ? 1 : (y > 15 && y < 30) ? 2 : (y >= 30) ? 3 : 0;
         world[y][x] = type;
         worldDamage[y][x] = type !== 0 ? DURABILITY[type] : 0;
     }
 }
 
-for (let x = 2; x < WORLD_COLS - 2; x++) {
+// Gerar Árvores
+for (let x = 5; x < WORLD_COLS - 5; x++) {
     if (Math.random() > 0.9) {
-        let h = 3 + Math.floor(Math.random() * 3); 
+        let h = 4 + Math.floor(Math.random() * 3); 
         for (let i = 1; i <= h; i++) treeWorld[15-i][x] = 4;
         const topY = 15 - h - 1;
         [[topY, x], [topY, x-1], [topY, x+1], [topY-1, x]].forEach(([ly, lx]) => {
@@ -97,24 +97,24 @@ canvas.onmousemove = (e) => {
     mousePos.y = e.clientY + camera.y;
 };
 
-// --- Funções Auxiliares ---
 function isSolid(px, py) {
     const gx = Math.floor(px / TILE_SIZE);
     const gy = Math.floor(py / TILE_SIZE);
     return world[gy] && world[gy][gx] !== 0;
 }
 
-function drawMountains(parallaxFactor, color, heightOffset) {
-    const startX = - (camera.x * parallaxFactor) % 800;
+// Função para desenhar as montanhas mais altas
+function drawMountains(parallaxFactor, color, baseHeight, peakHeight) {
+    const startX = - (camera.x * parallaxFactor) % 1200;
     ctx.fillStyle = color;
-    for (let i = -1; i < (canvas.width / 800) + 1; i++) {
-        const x = startX + i * 800;
+    for (let i = -1; i < (canvas.width / 1200) + 1; i++) {
+        const x = startX + i * 1200;
         ctx.beginPath();
         ctx.moveTo(x, canvas.height);
-        ctx.lineTo(x + 200, canvas.height - 150 - heightOffset);
-        ctx.lineTo(x + 400, canvas.height - 250 - heightOffset);
-        ctx.lineTo(x + 600, canvas.height - 100 - heightOffset);
-        ctx.lineTo(x + 800, canvas.height);
+        ctx.lineTo(x + 300, canvas.height - baseHeight - peakHeight * 0.7);
+        ctx.lineTo(x + 600, canvas.height - baseHeight - peakHeight);
+        ctx.lineTo(x + 900, canvas.height - baseHeight - peakHeight * 0.5);
+        ctx.lineTo(x + 1200, canvas.height);
         ctx.fill();
     }
 }
@@ -165,32 +165,55 @@ function draw() {
     ctx.fillStyle = '#87CEEB';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Montanhas (Fundo)
-    drawMountains(0.1, '#5f9ea0', 100); // Camada 1 (Mais lenta/distante)
-    drawMountains(0.3, '#4682b4', 0);   // Camada 2 (Mais rápida/próxima)
+    // Montanhas BEM mais altas
+    drawMountains(0.1, '#5f9ea0', 200, 500); // Camada distante
+    drawMountains(0.25, '#4682b4', 150, 350); // Camada próxima
 
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
     const sC = Math.floor(camera.x / TILE_SIZE);
     const eC = sC + Math.ceil(canvas.width / TILE_SIZE) + 1;
+    const sR = Math.floor(camera.y / TILE_SIZE);
+    const eR = sR + Math.ceil(canvas.height / TILE_SIZE) + 1;
 
-    for (let y = 0; y < WORLD_ROWS; y++) {
+    for (let y = sR; y < eR; y++) {
         for (let x = sC; x < eC; x++) {
-            if (treeWorld[y][x] !== 0) {
+            // 1. Desenhar Paredes de Fundo (Backwalls)
+            if (y >= 15) {
+                let wallImg = (y < 30) ? imgTerra : imgPedra;
+                ctx.globalAlpha = 0.5; // Parede é mais transparente/fosca
+                ctx.drawImage(wallImg, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                // Filtro escuro para a parede
+                ctx.fillStyle = "rgba(0,0,0,0.4)";
+                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                ctx.globalAlpha = 1;
+            }
+
+            // 2. Desenhar Árvores
+            if (treeWorld[y] && treeWorld[y][x] !== 0) {
                 ctx.globalAlpha = 0.8;
                 let tImg = treeWorld[y][x] === 4 ? imgTronco : imgFolha;
                 let off = treeWorld[y][x] === 4 ? 8 : 0;
                 ctx.drawImage(tImg, x * TILE_SIZE + off, y * TILE_SIZE, TILE_SIZE - (off*2), TILE_SIZE);
                 ctx.globalAlpha = 1;
             }
-            if (world[y][x] !== 0) {
+
+            // 3. Desenhar Blocos Quebráveis
+            if (world[y] && world[y][x] !== 0) {
                 let img = world[y][x] === 1 ? imgGrama : (world[y][x] === 2 ? imgTerra : imgPedra);
                 ctx.drawImage(img, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                
+                // Rachaduras de dano
+                if (worldDamage[y][x] < DURABILITY[world[y][x]]) {
+                    ctx.fillStyle = `rgba(0,0,0,${1 - (worldDamage[y][x]/DURABILITY[world[y][x]])})`;
+                    ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                }
             }
         }
     }
 
+    // Player
     ctx.fillStyle = '#FF6347';
     ctx.fillRect(player.x, player.y, player.w, player.h);
 
