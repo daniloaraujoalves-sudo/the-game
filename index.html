@@ -2,21 +2,24 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria - Camada de Pedra</title>
+    <title>Mini Terraria - Transição e Iluminação</title>
     <style>
         body { margin: 0; overflow: hidden; background: #4da0ff; font-family: sans-serif; }
         canvas { display: block; cursor: crosshair; }
         .info { 
             position: absolute; top: 10px; left: 10px; 
             color: white; text-shadow: 1px 1px 2px black; 
-            background: rgba(0,0,0,0.3); padding: 8px; border-radius: 5px;
+            background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px;
             pointer-events: none;
         }
     </style>
 </head>
 <body>
 
-<div class="info">WASD: Mover | Clique: Minerar | Pedra abaixo da Terra</div>
+<div class="info">
+    <b>WASD:</b> Mover | <b>Clique:</b> Minerar<br>
+    <i>Observe a transição terra-pedra e o brilho mineral</i>
+</div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -26,14 +29,27 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// --- Carregamento de Texturas ---
+// --- Sistema de Carregamento Seguro ---
+let assetsLoaded = 0;
+const totalAssets = 3;
+
+function onAssetLoad() {
+    assetsLoaded++;
+    if (assetsLoaded === totalAssets) {
+        update(); // Só inicia o loop quando tudo carregar
+    }
+}
+
 const imgGrama = new Image();
+imgGrama.onload = onAssetLoad;
 imgGrama.src = "https://st2.depositphotos.com/1796420/8408/v/450/depositphotos_84083416-stock-illustration-texture-for-platformers-pixel-art.jpg";
 
 const imgTerra = new Image();
+imgTerra.onload = onAssetLoad;
 imgTerra.src = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTRtCbeyZC6PjgiaDttQFYo4r4TUHIJFCdumA&s";
 
 const imgPedra = new Image();
+imgPedra.onload = onAssetLoad;
 imgPedra.src = "https://i.pinimg.com/236x/d3/5c/0c/d35c0c58fff90987e9532e808ded0008.jpg";
 
 // --- Configurações ---
@@ -42,15 +58,18 @@ const ROWS = Math.ceil(canvas.height / TILE_SIZE);
 const COLS = Math.ceil(canvas.width / TILE_SIZE);
 const GRAVITY = 0.5;
 
-// --- Mundo (0=Ar, 1=Grama, 2=Terra, 3=Pedra) ---
 let world = [];
 for (let y = 0; y < ROWS; y++) {
     world[y] = [];
     for (let x = 0; x < COLS; x++) {
         if (y === 11) world[y][x] = 1;      // Grama
-        else if (y > 11 && y < 16) world[y][x] = 2; // Terra
+        else if (y > 11 && y < 16) {
+            // Mistura terra e pedra na transição (y=15)
+            if (y === 15 && Math.random() > 0.5) world[y][x] = 3;
+            else world[y][x] = 2;
+        }
         else if (y >= 16) world[y][x] = 3;   // Pedra
-        else world[y][x] = 0;               // Ar
+        else world[y][x] = 0;
     }
 }
 
@@ -98,11 +117,10 @@ function update() {
 }
 
 function draw() {
-    // Céu
+    // Fundo
     ctx.fillStyle = '#87CEEB';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Desenhar Blocos
     for (let y = 0; y < ROWS; y++) {
         for (let x = 0; x < COLS; x++) {
             const blockType = world[y][x];
@@ -117,22 +135,28 @@ function draw() {
                 ctx.drawImage(imgTerra, posX, posY, TILE_SIZE, TILE_SIZE);
             } else if (blockType === 3) {
                 ctx.drawImage(imgPedra, posX, posY, TILE_SIZE, TILE_SIZE);
-                // Sombra extra para a pedra (fica mais escuro conforme desce)
-                ctx.fillStyle = `rgba(0,0,0,${Math.min(0.5, (y-16)*0.05)})`;
+                
+                // --- Efeito de Iluminação Dinâmica ---
+                // Adiciona um "brilho mineral" (overlay branco sutil)
+                ctx.globalCompositeOperation = 'overlay';
+                ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(Math.sin(y * 0.5)) * 0.2})`;
+                ctx.fillRect(posX, posY, TILE_SIZE, TILE_SIZE);
+                ctx.globalCompositeOperation = 'source-over';
+
+                // Escurece conforme a profundidade
+                const darkness = Math.min(0.6, (y - 15) * 0.04);
+                ctx.fillStyle = `rgba(0, 0, 0, ${darkness})`;
                 ctx.fillRect(posX, posY, TILE_SIZE, TILE_SIZE);
             }
         }
     }
 
-    // Jogador estilizado
+    // Desenhar Jogador
     ctx.fillStyle = '#FF6347';
     ctx.fillRect(player.x, player.y, player.w, player.h);
-    ctx.strokeStyle = 'white';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
     ctx.strokeRect(player.x, player.y, player.w, player.h);
 }
-
-update();
 </script>
 </body>
 </html>
