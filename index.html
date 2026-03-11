@@ -2,21 +2,20 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria Melhorado</title>
+    <title>Mini Terraria com Texturas</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #4da0ff; font-family: 'Segoe UI', sans-serif; }
+        body { margin: 0; overflow: hidden; background: #4da0ff; font-family: sans-serif; }
         canvas { display: block; cursor: crosshair; }
         .info { 
-            position: absolute; top: 20px; left: 20px; 
-            color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); 
-            pointer-events: none; background: rgba(0,0,0,0.3);
-            padding: 10px; border-radius: 8px;
+            position: absolute; top: 10px; left: 10px; 
+            color: white; text-shadow: 1px 1px 2px black; 
+            background: rgba(0,0,0,0.3); padding: 8px; border-radius: 5px;
         }
     </style>
 </head>
 <body>
 
-<div class="info">WASD: Mover | Clique: Minerar</div>
+<div class="info">WASD para mover | Clique para minerar</div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -26,21 +25,18 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
+// --- Carregamento de Texturas ---
+const imgGrama = new Image();
+imgGrama.src = "https://st2.depositphotos.com/1796420/8408/v/450/depositphotos_84083416-stock-illustration-texture-for-platformers-pixel-art.jpg";
+
+const imgTerra = new Image();
+imgTerra.src = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTRtCbeyZC6PjgiaDttQFYo4r4TUHIJFCdumA&s";
+
+// --- Configurações ---
 const TILE_SIZE = 40;
 const ROWS = Math.ceil(canvas.height / TILE_SIZE);
 const COLS = Math.ceil(canvas.width / TILE_SIZE);
 const GRAVITY = 0.5;
-
-// Cores Estilizadas
-const COLORS = {
-    skyTop: '#4da0ff',
-    skyBottom: '#94c8ff',
-    grass: '#3ea331',
-    grassDark: '#2d7a24',
-    dirt: '#855e42',
-    dirtDark: '#5d4037',
-    player: '#e74c3c'
-};
 
 let world = [];
 for (let y = 0; y < ROWS; y++) {
@@ -52,7 +48,7 @@ for (let y = 0; y < ROWS; y++) {
 }
 
 const player = {
-    x: 100, y: 100, w: 26, h: 44,
+    x: 100, y: 100, w: 30, h: 50,
     vx: 0, vy: 0, speed: 5, jump: -10, onGround: false
 };
 
@@ -65,20 +61,6 @@ canvas.onmousedown = (e) => {
     const gridY = Math.floor(e.clientY / TILE_SIZE);
     if (world[gridY]) world[gridY][gridX] = 0;
 };
-
-// Função para desenhar detalhes de textura (ruído)
-function drawTileTexture(x, y, color1, color2) {
-    ctx.fillStyle = color1;
-    ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-    
-    // Pequenos detalhes/pontos para textura
-    ctx.fillStyle = color2;
-    for(let i=0; i<4; i++) {
-        let px = (i * 7) % TILE_SIZE;
-        let py = (i * 11) % TILE_SIZE;
-        ctx.fillRect(x + px, y + py, 4, 4);
-    }
-}
 
 function update() {
     if (keys['KeyA']) player.vx = -player.speed;
@@ -109,55 +91,44 @@ function update() {
 }
 
 function draw() {
-    // 1. Fundo com Gradiente
-    let sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    sky.addColorStop(0, COLORS.skyTop);
-    sky.addColorStop(0.6, COLORS.skyBottom);
-    ctx.fillStyle = sky;
+    // Fundo (Céu)
+    ctx.fillStyle = '#87CEEB';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // 2. Desenhar Blocos
+    // Desenhar Blocos com Imagens
     for (let y = 0; y < ROWS; y++) {
         for (let x = 0; x < COLS; x++) {
-            const tx = x * TILE_SIZE;
-            const ty = y * TILE_SIZE;
+            const blockType = world[y][x];
+            if (blockType === 0) continue;
 
-            if (world[y][x] === 1) { // Grama
-                drawTileTexture(tx, ty, COLORS.grass, COLORS.grassDark);
-                // "Franja" de grama no topo
-                ctx.fillStyle = '#55cc44';
-                ctx.fillRect(tx, ty, TILE_SIZE, 5);
-            } 
-            else if (world[y][x] === 2) { // Terra
-                drawTileTexture(tx, ty, COLORS.dirt, COLORS.dirtDark);
-                // Sombra interna para profundidade
-                ctx.fillStyle = 'rgba(0,0,0,0.15)';
-                ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
-            }
+            const posX = x * TILE_SIZE;
+            const posY = y * TILE_SIZE;
 
-            // Grade suave
-            if (world[y][x] !== 0) {
-                ctx.strokeStyle = 'rgba(0,0,0,0.05)';
-                ctx.strokeRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            if (blockType === 1) {
+                // Desenha a imagem da Grama
+                ctx.drawImage(imgGrama, posX, posY, TILE_SIZE, TILE_SIZE);
+            } else if (blockType === 2) {
+                // Desenha a imagem da Terra
+                ctx.drawImage(imgTerra, posX, posY, TILE_SIZE, TILE_SIZE);
+                
+                // Efeito de sombra opcional para profundidade (deixa blocos mais fundos escuros)
+                if (y > 12) {
+                    ctx.fillStyle = "rgba(0,0,0,0.2)";
+                    ctx.fillRect(posX, posY, TILE_SIZE, TILE_SIZE);
+                }
             }
         }
     }
 
-    // 3. Desenhar Jogador (com "olhos" e sombra)
-    // Sombra do jogador
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
-    ctx.fillRect(player.x + 4, player.y + 4, player.w, player.h);
-    
-    // Corpo
-    ctx.fillStyle = COLORS.player;
+    // Desenhar Jogador
+    ctx.fillStyle = '#FF6347';
     ctx.fillRect(player.x, player.y, player.w, player.h);
-    
-    // Olhos (olhando para a direção do movimento)
-    ctx.fillStyle = 'white';
-    let eyeOffset = player.vx >= 0 ? 15 : 5;
-    ctx.fillRect(player.x + eyeOffset, player.y + 10, 6, 6);
+    // Borda do jogador
+    ctx.strokeStyle = 'black';
+    ctx.strokeRect(player.x, player.y, player.w, player.h);
 }
 
+// Inicia o jogo
 update();
 </script>
 </body>
