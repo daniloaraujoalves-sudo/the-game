@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria - Sistema de Durabilidade</title>
+    <title>Mini Terraria - Versão Final</title>
     <style>
         body { margin: 0; overflow: hidden; background: #4da0ff; font-family: sans-serif; }
         canvas { display: block; cursor: crosshair; }
@@ -18,7 +18,7 @@
 
 <div class="info">
     <b>WASD:</b> Mover | <b>Clique/Segure:</b> Minerar<br>
-    <i>Pedra (20 cliques) demora mais que Terra (5 cliques)</i>
+    Colisão lateral e durabilidade ativadas.
 </div>
 <canvas id="gameCanvas"></canvas>
 
@@ -29,32 +29,25 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// --- Configurações de Blocos ---
+// --- Configurações ---
 const TILE_SIZE = 40;
-const DURABILITY = {
-    1: 5,  // Grama
-    2: 5,  // Terra
-    3: 20  // Pedra
-};
+const DURABILITY = { 1: 5, 2: 5, 3: 20 };
 
-// --- Carregamento de Texturas ---
+// --- Carregamento ---
 let assetsLoaded = 0;
 const totalAssets = 3;
 function onAssetLoad() { if (++assetsLoaded === totalAssets) update(); }
 
 const imgGrama = new Image(); imgGrama.onload = onAssetLoad;
 imgGrama.src = "https://st2.depositphotos.com/1796420/8408/v/450/depositphotos_84083416-stock-illustration-texture-for-platformers-pixel-art.jpg";
-
 const imgTerra = new Image(); imgTerra.onload = onAssetLoad;
 imgTerra.src = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTRtCbeyZC6PjgiaDttQFYo4r4TUHIJFCdumA&s";
-
 const imgPedra = new Image(); imgPedra.onload = onAssetLoad;
 imgPedra.src = "https://i.pinimg.com/236x/d3/5c/0c/d35c0c58fff90987e9532e808ded0008.jpg";
 
-// --- Mundo e Dano ---
+// --- Mundo ---
 let world = [];
-let worldDamage = []; // Armazena o HP atual de cada bloco
-
+let worldDamage = [];
 const ROWS = Math.ceil(canvas.height / TILE_SIZE);
 const COLS = Math.ceil(canvas.width / TILE_SIZE);
 
@@ -62,65 +55,84 @@ for (let y = 0; y < ROWS; y++) {
     world[y] = [];
     worldDamage[y] = [];
     for (let x = 0; x < COLS; x++) {
-        let type = 0;
-        if (y === 11) type = 1;
-        else if (y > 11 && y < 16) type = (y === 15 && Math.random() > 0.5) ? 3 : 2;
-        else if (y >= 16) type = 3;
-        
+        let type = (y === 11) ? 1 : (y > 11 && y < 16) ? 2 : (y >= 16) ? 3 : 0;
         world[y][x] = type;
         worldDamage[y][x] = type !== 0 ? DURABILITY[type] : 0;
     }
 }
 
-// --- Jogador ---
-const player = { x: 100, y: 100, w: 26, h: 44, vx: 0, vy: 0, speed: 5, jump: -10, onGround: false };
+// --- Personagem ---
+const player = {
+    x: 100, y: 100,
+    w: 24, h: 40,
+    vx: 0, vy: 0,
+    speed: 4,
+    jump: -10,
+    onGround: false
+};
+
 const keys = {};
 window.onkeydown = (e) => keys[e.code] = true;
 window.onkeyup = (e) => keys[e.code] = false;
 
-// --- Lógica de Mineração ---
+// --- Mouse / Mineração ---
 let isMouseDown = false;
 let mousePos = { x: 0, y: 0 };
-
 canvas.onmousedown = (e) => { isMouseDown = true; mousePos = { x: e.clientX, y: e.clientY }; };
 window.onmouseup = () => { isMouseDown = false; };
 canvas.onmousemove = (e) => { mousePos = { x: e.clientX, y: e.clientY }; };
 
+function isSolid(px, py) {
+    const gx = Math.floor(px / TILE_SIZE);
+    const gy = Math.floor(py / TILE_SIZE);
+    return world[gy] && world[gy][gx] !== 0;
+}
+
 function handleMining() {
     if (!isMouseDown) return;
-
-    const gridX = Math.floor(mousePos.x / TILE_SIZE);
-    const gridY = Math.floor(mousePos.y / TILE_SIZE);
-
-    if (world[gridY] && world[gridY][gridX] !== 0) {
-        worldDamage[gridY][gridX] -= 1; // Tira 1 de durabilidade por frame
-
-        if (worldDamage[gridY][gridX] <= 0) {
-            world[gridY][gridX] = 0;
-        }
+    const gx = Math.floor(mousePos.x / TILE_SIZE);
+    const gy = Math.floor(mousePos.y / TILE_SIZE);
+    if (world[gy] && world[gy][gx] !== 0) {
+        worldDamage[gy][gx] -= 1;
+        if (worldDamage[gy][gx] <= 0) world[gy][gx] = 0;
     }
 }
 
 function update() {
-    // Controles e Física
+    // 1. Movimento Horizontal
     if (keys['KeyA']) player.vx = -player.speed;
     else if (keys['KeyD']) player.vx = player.speed;
     else player.vx = 0;
 
-    if (keys['KeyW'] && player.onGround) { player.vy = player.jump; player.onGround = false; }
+    player.x += player.vx;
+
+    // Colisão Lateral
+    if (isSolid(player.x, player.y) || isSolid(player.x, player.y + player.h - 1)) {
+        if (player.vx < 0) player.x = (Math.floor(player.x / TILE_SIZE) + 1) * TILE_SIZE;
+    }
+    if (isSolid(player.x + player.w, player.y) || isSolid(player.x + player.w, player.y + player.h - 1)) {
+        if (player.vx > 0) player.x = (Math.floor((player.x + player.w) / TILE_SIZE)) * TILE_SIZE - player.w;
+    }
+
+    // 2. Movimento Vertical
+    if (keys['KeyW'] && player.onGround) {
+        player.vy = player.jump;
+        player.onGround = false;
+    }
 
     player.vy += 0.5; // Gravidade
-    player.x += player.vx;
     player.y += player.vy;
 
-    // Colisão simples
+    // Colisão Vertical
     player.onGround = false;
-    const pGridX = Math.floor((player.x + player.w/2) / TILE_SIZE);
-    const pGridY = Math.floor((player.y + player.h) / TILE_SIZE);
-    if (world[pGridY] && world[pGridY][pGridX] !== 0) {
-        player.y = pGridY * TILE_SIZE - player.h;
+    if (isSolid(player.x + 2, player.y + player.h) || isSolid(player.x + player.w - 2, player.y + player.h)) {
+        player.y = Math.floor((player.y + player.h) / TILE_SIZE) * TILE_SIZE - player.h;
         player.vy = 0;
         player.onGround = true;
+    }
+    if (isSolid(player.x + 2, player.y) || isSolid(player.x + player.w - 2, player.y)) {
+        player.y = (Math.floor(player.y / TILE_SIZE) + 1) * TILE_SIZE;
+        player.vy = 0;
     }
 
     handleMining();
@@ -129,6 +141,9 @@ function update() {
 }
 
 function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Fundo
     ctx.fillStyle = '#87CEEB';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -143,19 +158,11 @@ function draw() {
             
             ctx.drawImage(img, px, py, TILE_SIZE, TILE_SIZE);
 
-            // Efeito de rachadura/dano (escurece o bloco conforme perde vida)
+            // Efeito de Dano (Rachadura)
             const maxHP = DURABILITY[type];
             const currentHP = worldDamage[y][x];
             if (currentHP < maxHP) {
-                const damagePercent = 1 - (currentHP / maxHP);
-                ctx.fillStyle = `rgba(0, 0, 0, ${damagePercent * 0.7})`;
-                ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-            }
-
-            // Iluminação de profundidade para pedra
-            if (type === 3) {
-                const darkness = Math.min(0.5, (y - 15) * 0.05);
-                ctx.fillStyle = `rgba(0,0,0,${darkness})`;
+                ctx.fillStyle = `rgba(0, 0, 0, ${1 - (currentHP/maxHP)})`;
                 ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
             }
         }
