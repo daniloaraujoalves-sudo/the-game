@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria - Texturas Corrigidas</title>
+    <title>Mini Terraria - Profundidade e Texturas</title>
     <style>
         body { margin: 0; overflow: hidden; background: #4da0ff; font-family: sans-serif; }
         canvas { display: block; cursor: crosshair; }
@@ -17,8 +17,8 @@
 <body>
 
 <div class="info">
-    <b>TEXTURAS CORRIGIDAS:</b> Troncos e Folhas agora estão corretos.<br>
-    <b>WASD:</b> Mover | <b>Clique:</b> Minerar
+    <b>EFEITO PARALLAX:</b> As nuvens/fundo movem-se devagar.<br>
+    <b>WASD:</b> Mover | <b>Clique:</b> Minerar (Alcance: 4 blocos)
 </div>
 <canvas id="gameCanvas"></canvas>
 
@@ -33,7 +33,7 @@ const TILE_SIZE = 40;
 const REACH_DISTANCE = TILE_SIZE * 4;
 const DURABILITY = { 1: 5, 2: 5, 3: 20, 4: 10, 5: 10 }; 
 
-const WORLD_COLS = Math.ceil((canvas.width / TILE_SIZE) * 3);
+const WORLD_COLS = Math.ceil((canvas.width / TILE_SIZE) * 5); // Mundo um pouco maior
 const WORLD_ROWS = Math.ceil((canvas.height / TILE_SIZE) * 3);
 const WORLD_WIDTH = WORLD_COLS * TILE_SIZE;
 const WORLD_HEIGHT = WORLD_ROWS * TILE_SIZE;
@@ -52,11 +52,9 @@ imgTerra.src = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTRtCbeyZC6
 const imgPedra = new Image(); imgPedra.onload = onAssetLoad;
 imgPedra.src = "https://i.pinimg.com/236x/d3/5c/0c/d35c0c58fff90987e9532e808ded0008.jpg";
 
-// TEXTURA DO TRONCO CORRIGIDA
 const imgTronco = new Image(); imgTronco.onload = onAssetLoad;
 imgTronco.src = "https://i.pinimg.com/736x/10/61/7b/10617b804bd2581499fcbea1426439f1.jpg";
 
-// TEXTURA DA FOLHA
 const imgFolha = new Image(); imgFolha.onload = onAssetLoad;
 imgFolha.src = "https://i.pinimg.com/1200x/09/c5/2d/09c52d89d8086495ab609332e6d55e85.jpg";
 
@@ -77,28 +75,26 @@ for (let y = 0; y < WORLD_ROWS; y++) {
 
 // Gerar Árvores
 for (let x = 2; x < WORLD_COLS - 2; x++) {
-    if (Math.random() > 0.88) {
+    if (Math.random() > 0.85) {
         let h = 3 + Math.floor(Math.random() * 3); 
         for (let i = 1; i <= h; i++) {
             if (15-i >= 0) {
-                treeWorld[15-i][x] = 4; // Tronco
+                treeWorld[15-i][x] = 4;
                 worldDamage[15-i][x] = DURABILITY[4];
             }
         }
         const topY = 15 - h - 1;
-        if (treeWorld[topY]) {
-            const leaves = [[topY, x], [topY, x-1], [topY, x+1], [topY-1, x]];
-            leaves.forEach(([ly, lx]) => {
-                if (treeWorld[ly]) {
-                    treeWorld[ly][lx] = 5; // Folha
-                    worldDamage[ly][lx] = DURABILITY[5];
-                }
-            });
-        }
+        const leaves = [[topY, x], [topY, x-1], [topY, x+1], [topY-1, x]];
+        leaves.forEach(([ly, lx]) => {
+            if (treeWorld[ly] && lx >= 0 && lx < WORLD_COLS) {
+                treeWorld[ly][lx] = 5;
+                worldDamage[ly][lx] = DURABILITY[5];
+            }
+        });
     }
 }
 
-const player = { x: WORLD_WIDTH / 2, y: 400, w: 24, h: 40, vx: 0, vy: 0, speed: 5, jump: -12, onGround: false };
+const player = { x: WORLD_WIDTH / 2, y: 400, w: 22, h: 38, vx: 0, vy: 0, speed: 5, jump: -11, onGround: false };
 const keys = {};
 window.onkeydown = (e) => keys[e.code] = true;
 window.onkeyup = (e) => keys[e.code] = false;
@@ -140,18 +136,28 @@ function handleMining() {
 function update() {
     player.vx = keys['KeyA'] ? -player.speed : keys['KeyD'] ? player.speed : 0;
     player.x += player.vx;
-    if (isSolid(player.x, player.y) || isSolid(player.x, player.y + player.h - 1)) player.x = (Math.floor(player.x / TILE_SIZE) + 1) * TILE_SIZE;
-    if (isSolid(player.x + player.w, player.y) || isSolid(player.x + player.w, player.y + player.h - 1)) player.x = (Math.floor((player.x + player.w) / TILE_SIZE)) * TILE_SIZE - player.w;
+    
+    // Colisão Horizontal
+    if (isSolid(player.x, player.y + 2) || isSolid(player.x, player.y + player.h - 2)) 
+        player.x = (Math.floor(player.x / TILE_SIZE) + 1) * TILE_SIZE;
+    if (isSolid(player.x + player.w, player.y + 2) || isSolid(player.x + player.w, player.y + player.h - 2)) 
+        player.x = (Math.floor((player.x + player.w) / TILE_SIZE)) * TILE_SIZE - player.w;
 
     if (keys['KeyW'] && player.onGround) { player.vy = player.jump; player.onGround = false; }
-    player.vy += 0.6;
+    player.vy += 0.55;
     player.y += player.vy;
 
+    // Colisão Vertical
     player.onGround = false;
     if (isSolid(player.x + 2, player.y + player.h) || isSolid(player.x + player.w - 2, player.y + player.h)) {
         player.y = Math.floor((player.y + player.h) / TILE_SIZE) * TILE_SIZE - player.h;
         player.vy = 0;
         player.onGround = true;
+    }
+    // Teto
+    if (isSolid(player.x + 2, player.y) || isSolid(player.x + player.w - 2, player.y)) {
+        player.y = (Math.floor(player.y / TILE_SIZE) + 1) * TILE_SIZE;
+        player.vy = 0;
     }
 
     handleMining();
@@ -163,11 +169,18 @@ function update() {
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // --- FUNDO PARALLAX ---
+    // Move-se a 20% da velocidade da câmera
+    ctx.fillStyle = '#6ab7ff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    for(let i=0; i<10; i++) {
+        ctx.fillRect((i*400 - camera.x*0.2) % WORLD_WIDTH, 100 + (i*20), 120, 40);
+    }
+
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
-
-    ctx.fillStyle = '#87CEEB';
-    ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
     const sC = Math.floor(camera.x / TILE_SIZE);
     const eC = sC + Math.ceil(canvas.width / TILE_SIZE) + 1;
@@ -177,7 +190,7 @@ function draw() {
     for (let y = sR; y < eR; y++) {
         if (!world[y]) continue;
         for (let x = sC; x < eC; x++) {
-            // Troncos e Folhas
+            // Árvores
             if (treeWorld[y][x] !== 0) {
                 let tImg = treeWorld[y][x] === 4 ? imgTronco : imgFolha;
                 ctx.globalAlpha = 0.85;
@@ -192,7 +205,7 @@ function draw() {
                     ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
                 }
             }
-            // Blocos de Primeiro Plano
+            // Blocos Principais
             if (world[y][x] !== 0) {
                 let img = world[y][x] === 1 ? imgGrama : (world[y][x] === 2 ? imgTerra : imgPedra);
                 ctx.drawImage(img, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
@@ -204,8 +217,10 @@ function draw() {
         }
     }
 
+    // Player
     ctx.fillStyle = '#FF6347';
     ctx.fillRect(player.x, player.y, player.w, player.h);
+    
     ctx.restore();
 }
 </script>
