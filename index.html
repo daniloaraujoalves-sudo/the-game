@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria - Câmera Centralizada</title>
+    <title>Mini Terraria - Árvores de Fundo</title>
     <style>
         body { margin: 0; overflow: hidden; background: #4da0ff; font-family: sans-serif; }
         canvas { display: block; cursor: crosshair; }
@@ -17,8 +17,8 @@
 <body>
 
 <div class="info">
-    <b>CÂMERA ATIVA:</b> O mundo agora segue você.<br>
-    <b>Limite:</b> 3x o campo de visão.
+    <b>ÁRVORES ADICIONADAS:</b> Elas ficam no fundo.<br>
+    <b>Durabilidade:</b> 10 (Metade da Pedra).
 </div>
 <canvas id="gameCanvas"></canvas>
 
@@ -29,17 +29,16 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// --- Configurações do Mundo ---
+// --- Configurações ---
 const TILE_SIZE = 40;
-const DURABILITY = { 1: 5, 2: 5, 3: 20 };
+const DURABILITY = { 1: 5, 2: 5, 3: 20, 4: 10 }; // 4 é a Árvore (Madeira)
 
-// Gerando um mundo 3x maior que a tela (Limite solicitado)
 const WORLD_COLS = Math.ceil((canvas.width / TILE_SIZE) * 3);
 const WORLD_ROWS = Math.ceil((canvas.height / TILE_SIZE) * 3);
 const WORLD_WIDTH = WORLD_COLS * TILE_SIZE;
 const WORLD_HEIGHT = WORLD_ROWS * TILE_SIZE;
 
-// --- Carregamento de Texturas ---
+// --- Carregamento ---
 let assetsLoaded = 0;
 const totalAssets = 3;
 function onAssetLoad() { if (++assetsLoaded === totalAssets) update(); }
@@ -51,17 +50,19 @@ imgTerra.src = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTRtCbeyZC6
 const imgPedra = new Image(); imgPedra.onload = onAssetLoad;
 imgPedra.src = "https://i.pinimg.com/236x/d3/5c/0c/d35c0c58fff90987e9532e808ded0008.jpg";
 
-// --- Inicialização do Mundo ---
+// --- Mundos ---
 let world = [];
 let worldDamage = [];
+let treeWorld = []; // Camada de fundo para árvores
 
 for (let y = 0; y < WORLD_ROWS; y++) {
     world[y] = [];
     worldDamage[y] = [];
+    treeWorld[y] = [];
     for (let x = 0; x < WORLD_COLS; x++) {
+        treeWorld[y][x] = 0;
         let type = 0;
-        // Definindo camadas proporcionais ao tamanho total do mundo
-        if (y === 15) type = 1; // Linha da grama mais abaixo para dar espaço no céu
+        if (y === 15) type = 1;
         else if (y > 15 && y < 25) type = 2;
         else if (y >= 25) type = 3;
         
@@ -70,45 +71,42 @@ for (let y = 0; y < WORLD_ROWS; y++) {
     }
 }
 
-// --- Personagem ---
-const player = {
-    x: WORLD_WIDTH / 2, // Começa no meio do mundo
-    y: 400,
-    w: 24, h: 40,
-    vx: 0, vy: 0,
-    speed: 5,
-    jump: -12,
-    onGround: false
-};
+// Gerar Árvores Aleatórias
+for (let x = 2; x < WORLD_COLS - 2; x++) {
+    if (Math.random() > 0.8) { // 20% de chance de ter uma árvore na coluna
+        const surfaceY = 15;
+        const treeHeight = 3 + Math.floor(Math.random() * 3);
+        // Tronco
+        for (let i = 1; i <= treeHeight; i++) {
+            if (world[surfaceY - i]) {
+                treeWorld[surfaceY - i][x] = 4;
+                worldDamage[surfaceY - i][x] = DURABILITY[4];
+            }
+        }
+        // Copa Simples
+        treeWorld[surfaceY - treeHeight - 1][x] = 4;
+        treeWorld[surfaceY - treeHeight - 1][x-1] = 4;
+        treeWorld[surfaceY - treeHeight - 1][x+1] = 4;
+        worldDamage[surfaceY - treeHeight - 1][x] = DURABILITY[4];
+        worldDamage[surfaceY - treeHeight - 1][x-1] = DURABILITY[4];
+        worldDamage[surfaceY - treeHeight - 1][x+1] = DURABILITY[4];
+    }
+}
 
+const player = { x: WORLD_WIDTH / 2, y: 400, w: 24, h: 40, vx: 0, vy: 0, speed: 5, jump: -12, onGround: false };
 const keys = {};
 window.onkeydown = (e) => keys[e.code] = true;
 window.onkeyup = (e) => keys[e.code] = false;
 
-// --- Câmera ---
 const camera = { x: 0, y: 0 };
-
-function updateCamera() {
-    // Tenta centralizar o player
-    camera.x = player.x - canvas.width / 2;
-    camera.y = player.y - canvas.height / 2;
-
-    // Trava a câmera nos limites do mundo
-    if (camera.x < 0) camera.x = 0;
-    if (camera.y < 0) camera.y = 0;
-    if (camera.x > WORLD_WIDTH - canvas.width) camera.x = WORLD_WIDTH - canvas.width;
-    if (camera.y > WORLD_HEIGHT - canvas.height) camera.y = WORLD_HEIGHT - canvas.height;
-}
-
-// --- Lógica de Jogo ---
 let isMouseDown = false;
 let mousePos = { x: 0, y: 0 };
+
 canvas.onmousedown = (e) => { isMouseDown = true; updateMouse(e); };
 window.onmouseup = () => { isMouseDown = false; };
 canvas.onmousemove = (e) => { updateMouse(e); };
 
 function updateMouse(e) {
-    // O clique precisa considerar onde a câmera está!
     mousePos.x = e.clientX + camera.x;
     mousePos.y = e.clientY + camera.y;
 }
@@ -120,13 +118,11 @@ function isSolid(px, py) {
 }
 
 function update() {
-    // Movimento
     if (keys['KeyA']) player.vx = -player.speed;
     else if (keys['KeyD']) player.vx = player.speed;
     else player.vx = 0;
 
     player.x += player.vx;
-    // Colisão X
     if (isSolid(player.x, player.y) || isSolid(player.x, player.y + player.h - 1)) player.x = (Math.floor(player.x / TILE_SIZE) + 1) * TILE_SIZE;
     if (isSolid(player.x + player.w, player.y) || isSolid(player.x + player.w, player.y + player.h - 1)) player.x = (Math.floor((player.x + player.w) / TILE_SIZE)) * TILE_SIZE - player.w;
 
@@ -134,45 +130,42 @@ function update() {
     player.vy += 0.6;
     player.y += player.vy;
 
-    // Colisão Y
     player.onGround = false;
     if (isSolid(player.x + 2, player.y + player.h) || isSolid(player.x + player.w - 2, player.y + player.h)) {
         player.y = Math.floor((player.y + player.h) / TILE_SIZE) * TILE_SIZE - player.h;
         player.vy = 0;
         player.onGround = true;
     }
-    if (isSolid(player.x + 2, player.y) || isSolid(player.x + player.w - 2, player.y)) {
-        player.y = (Math.floor(player.y / TILE_SIZE) + 1) * TILE_SIZE;
-        player.vy = 0;
-    }
 
-    // Mineração
+    // Mineração Otimizada (Prioriza bloco da frente, depois árvore)
     if (isMouseDown) {
         const gx = Math.floor(mousePos.x / TILE_SIZE);
         const gy = Math.floor(mousePos.y / TILE_SIZE);
+        
         if (world[gy] && world[gy][gx] !== 0) {
             worldDamage[gy][gx]--;
             if (worldDamage[gy][gx] <= 0) world[gy][gx] = 0;
+        } else if (treeWorld[gy] && treeWorld[gy][gx] !== 0) {
+            worldDamage[gy][gx]--;
+            if (worldDamage[gy][gx] <= 0) treeWorld[gy][gx] = 0;
         }
     }
 
-    updateCamera();
+    camera.x = Math.max(0, Math.min(player.x - canvas.width / 2, WORLD_WIDTH - canvas.width));
+    camera.y = Math.max(0, Math.min(player.y - canvas.height / 2, WORLD_HEIGHT - canvas.height));
+
     draw();
     requestAnimationFrame(update);
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Início da Câmera
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
-    // Fundo (Céu) - desenhado no tamanho total do mundo
     ctx.fillStyle = '#87CEEB';
     ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
-    // Desenhar Blocos (Otimizado: desenha apenas o que aparece na tela)
     const startCol = Math.floor(camera.x / TILE_SIZE);
     const endCol = startCol + Math.ceil(canvas.width / TILE_SIZE) + 1;
     const startRow = Math.floor(camera.y / TILE_SIZE);
@@ -180,27 +173,42 @@ function draw() {
 
     for (let y = startRow; y < endRow; y++) {
         for (let x = startCol; x < endCol; x++) {
-            if (!world[y] || world[y][x] === 0) continue;
-            
-            const type = world[y][x];
-            const px = x * TILE_SIZE;
-            const py = y * TILE_SIZE;
-            let img = type === 1 ? imgGrama : (type === 2 ? imgTerra : imgPedra);
-            
-            ctx.drawImage(img, px, py, TILE_SIZE, TILE_SIZE);
+            // Desenhar Árvores (FUNDO)
+            if (treeWorld[y] && treeWorld[y][x] === 4) {
+                ctx.fillStyle = '#5d4037'; // Marrom Tronco
+                // Se for a "copa" (acima do tronco principal)
+                if (treeWorld[y+1] && treeWorld[y+1][x] !== 4) ctx.fillStyle = '#2d5a27'; // Verde Copa
+                
+                ctx.globalAlpha = 0.7; // Efeito de segundo plano
+                ctx.fillRect(x * TILE_SIZE + 10, y * TILE_SIZE, TILE_SIZE - 20, TILE_SIZE);
+                ctx.globalAlpha = 1.0;
 
-            if (worldDamage[y][x] < DURABILITY[type]) {
-                ctx.fillStyle = `rgba(0, 0, 0, ${1 - (worldDamage[y][x]/DURABILITY[type])})`;
-                ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+                // Dano na árvore
+                if (worldDamage[y][x] < DURABILITY[4]) {
+                    ctx.fillStyle = `rgba(0,0,0,${1 - (worldDamage[y][x]/DURABILITY[4])})`;
+                    ctx.fillRect(x * TILE_SIZE + 10, y * TILE_SIZE, TILE_SIZE - 20, TILE_SIZE);
+                }
+            }
+
+            // Desenhar Blocos (FRENTE)
+            const type = world[y] ? world[y][x] : 0;
+            if (type !== 0) {
+                const px = x * TILE_SIZE;
+                const py = y * TILE_SIZE;
+                let img = type === 1 ? imgGrama : (type === 2 ? imgTerra : imgPedra);
+                ctx.drawImage(img, px, py, TILE_SIZE, TILE_SIZE);
+                if (worldDamage[y][x] < DURABILITY[type]) {
+                    ctx.fillStyle = `rgba(0,0,0,${1 - (worldDamage[y][x]/DURABILITY[type])})`;
+                    ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+                }
             }
         }
     }
 
-    // Jogador
     ctx.fillStyle = '#FF6347';
     ctx.fillRect(player.x, player.y, player.w, player.h);
 
-    ctx.restore(); // Fim da Câmera
+    ctx.restore();
 }
 </script>
 </body>
