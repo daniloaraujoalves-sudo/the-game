@@ -2,16 +2,21 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria JS</title>
+    <title>Mini Terraria Melhorado</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: sans-serif; }
-        canvas { display: block; background: #87CEEB; cursor: crosshair; }
-        .info { position: absolute; top: 10; left: 10; color: white; text-shadow: 1px 1px 2px black; pointer-events: none; }
+        body { margin: 0; overflow: hidden; background: #4da0ff; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; cursor: crosshair; }
+        .info { 
+            position: absolute; top: 20px; left: 20px; 
+            color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); 
+            pointer-events: none; background: rgba(0,0,0,0.3);
+            padding: 10px; border-radius: 8px;
+        }
     </style>
 </head>
 <body>
 
-<div class="info">WASD para mover | Clique para minerar</div>
+<div class="info">WASD: Mover | Clique: Minerar</div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -21,13 +26,22 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// --- Configurações ---
 const TILE_SIZE = 40;
 const ROWS = Math.ceil(canvas.height / TILE_SIZE);
 const COLS = Math.ceil(canvas.width / TILE_SIZE);
 const GRAVITY = 0.5;
 
-// --- Mundo (0 = Ar, 1 = Grama, 2 = Terra) ---
+// Cores Estilizadas
+const COLORS = {
+    skyTop: '#4da0ff',
+    skyBottom: '#94c8ff',
+    grass: '#3ea331',
+    grassDark: '#2d7a24',
+    dirt: '#855e42',
+    dirtDark: '#5d4037',
+    player: '#e74c3c'
+};
+
 let world = [];
 for (let y = 0; y < ROWS; y++) {
     world[y] = [];
@@ -37,29 +51,36 @@ for (let y = 0; y < ROWS; y++) {
     }
 }
 
-// --- Jogador ---
 const player = {
-    x: 100, y: 100,
-    w: 30, h: 50,
-    vx: 0, vy: 0,
-    speed: 5,
-    jump: -10,
-    onGround: false
+    x: 100, y: 100, w: 26, h: 44,
+    vx: 0, vy: 0, speed: 5, jump: -10, onGround: false
 };
 
 const keys = {};
 window.onkeydown = (e) => keys[e.code] = true;
 window.onkeyup = (e) => keys[e.code] = false;
 
-// --- Mineração ---
 canvas.onmousedown = (e) => {
     const gridX = Math.floor(e.clientX / TILE_SIZE);
     const gridY = Math.floor(e.clientY / TILE_SIZE);
     if (world[gridY]) world[gridY][gridX] = 0;
 };
 
+// Função para desenhar detalhes de textura (ruído)
+function drawTileTexture(x, y, color1, color2) {
+    ctx.fillStyle = color1;
+    ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+    
+    // Pequenos detalhes/pontos para textura
+    ctx.fillStyle = color2;
+    for(let i=0; i<4; i++) {
+        let px = (i * 7) % TILE_SIZE;
+        let py = (i * 11) % TILE_SIZE;
+        ctx.fillRect(x + px, y + py, 4, 4);
+    }
+}
+
 function update() {
-    // Controles
     if (keys['KeyA']) player.vx = -player.speed;
     else if (keys['KeyD']) player.vx = player.speed;
     else player.vx = 0;
@@ -69,12 +90,10 @@ function update() {
         player.onGround = false;
     }
 
-    // Física
     player.vy += GRAVITY;
     player.x += player.vx;
     player.y += player.vy;
 
-    // Colisão simples com o chão (blocos)
     player.onGround = false;
     const pGridX = Math.floor((player.x + player.w/2) / TILE_SIZE);
     const pGridY = Math.floor((player.y + player.h) / TILE_SIZE);
@@ -90,24 +109,53 @@ function update() {
 }
 
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // 1. Fundo com Gradiente
+    let sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    sky.addColorStop(0, COLORS.skyTop);
+    sky.addColorStop(0.6, COLORS.skyBottom);
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Desenhar Blocos
+    // 2. Desenhar Blocos
     for (let y = 0; y < ROWS; y++) {
         for (let x = 0; x < COLS; x++) {
-            if (world[y][x] === 1) ctx.fillStyle = '#228B22'; // Grama
-            else if (world[y][x] === 2) ctx.fillStyle = '#8B4513'; // Terra
-            else continue;
+            const tx = x * TILE_SIZE;
+            const ty = y * TILE_SIZE;
 
-            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-            ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            if (world[y][x] === 1) { // Grama
+                drawTileTexture(tx, ty, COLORS.grass, COLORS.grassDark);
+                // "Franja" de grama no topo
+                ctx.fillStyle = '#55cc44';
+                ctx.fillRect(tx, ty, TILE_SIZE, 5);
+            } 
+            else if (world[y][x] === 2) { // Terra
+                drawTileTexture(tx, ty, COLORS.dirt, COLORS.dirtDark);
+                // Sombra interna para profundidade
+                ctx.fillStyle = 'rgba(0,0,0,0.15)';
+                ctx.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            }
+
+            // Grade suave
+            if (world[y][x] !== 0) {
+                ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+                ctx.strokeRect(tx, ty, TILE_SIZE, TILE_SIZE);
+            }
         }
     }
 
-    // Desenhar Jogador
-    ctx.fillStyle = '#FF6347';
+    // 3. Desenhar Jogador (com "olhos" e sombra)
+    // Sombra do jogador
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(player.x + 4, player.y + 4, player.w, player.h);
+    
+    // Corpo
+    ctx.fillStyle = COLORS.player;
     ctx.fillRect(player.x, player.y, player.w, player.h);
+    
+    // Olhos (olhando para a direção do movimento)
+    ctx.fillStyle = 'white';
+    let eyeOffset = player.vx >= 0 ? 15 : 5;
+    ctx.fillRect(player.x + eyeOffset, player.y + 10, 6, 6);
 }
 
 update();
