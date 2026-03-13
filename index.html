@@ -2,35 +2,29 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria - Inventário e Construção</title>
+    <title>Mini Terraria - Pulo e Árvores</title>
     <style>
         body { margin: 0; overflow: hidden; background: #4da0ff; font-family: 'Segoe UI', sans-serif; }
         canvas { display: block; cursor: crosshair; }
-        
         .info { 
             position: absolute; top: 10px; left: 10px; 
             color: white; text-shadow: 1px 1px 2px black; 
             background: rgba(0,0,0,0.5); padding: 12px; border-radius: 8px;
             pointer-events: none; z-index: 10;
         }
-
         #inventory-ui {
             position: absolute; bottom: 20px; left: 50%;
             transform: translateX(-50%); display: flex; gap: 8px;
             background: rgba(0, 0, 0, 0.6); padding: 10px;
             border-radius: 12px; border: 2px solid #444; z-index: 100;
         }
-
         .slot {
             width: 50px; height: 50px; background: #333;
             border: 2px solid #666; border-radius: 4px;
             display: flex; align-items: center; justify-content: center;
-            position: relative; transition: 0.2s;
+            position: relative;
         }
-
-        /* Destaque para o item selecionado */
         .slot.selected { border-color: #fff; box-shadow: 0 0 10px #fff; background: #444; }
-
         .slot img { width: 32px; height: 32px; image-rendering: pixelated; }
         .count { position: absolute; bottom: 2px; right: 4px; color: white; font-size: 12px; font-weight: bold; }
     </style>
@@ -38,8 +32,8 @@
 <body>
 
 <div class="info">
-    <b>BOTÃO ESQUERDO:</b> Minerar | <b>BOTÃO DIREITO:</b> Construir<br>
-    <b>TECLAS 1-5:</b> Selecionar Item | <b>W, A, D:</b> Mover
+    <b>ESQUERDO:</b> Minerar | <b>DIREITO:</b> Construir<br>
+    <b>W / ESPAÇO:</b> Pular | <b>1-5:</b> Itens | <b>A, D:</b> Mover
 </div>
 
 <div id="inventory-ui">
@@ -59,48 +53,21 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
 const TILE_SIZE = 40;
-const REACH_DISTANCE = TILE_SIZE * 5;
-const DURABILITY = { 1: 5, 2: 5, 3: 15, 4: 10, 5: 5 }; 
+const REACH_DISTANCE = TILE_SIZE * 6;
+const DURABILITY = { 1: 5, 2: 5, 3: 15, 4: 8, 5: 3 }; 
 
-// --- Sistema de Inventário ---
-let inventory = { 1: 10, 2: 10, 3: 0, 4: 0, 5: 0 }; // Começa com alguns blocos para teste
+let inventory = { 1: 10, 2: 10, 3: 5, 4: 5, 5: 5 };
 let selectedSlot = 1;
-
-function updateInventoryUI() {
-    for (let i = 1; i <= 5; i++) {
-        const slot = document.getElementById(`slot-${i}`);
-        const countText = slot.querySelector('.count');
-        countText.innerText = inventory[i];
-        
-        slot.classList.toggle('selected', selectedSlot === i);
-
-        if (inventory[i] > 0 && !slot.querySelector('img')) {
-            const imgClone = getImgByType(i).cloneNode();
-            slot.appendChild(imgClone);
-        } else if (inventory[i] <= 0) {
-            const img = slot.querySelector('img');
-            if (img) img.remove();
-        }
-    }
-}
-
-function getImgByType(type) {
-    if (type === 1) return imgGrama;
-    if (type === 2) return imgTerra;
-    if (type === 3) return imgPedra;
-    if (type === 4) return imgTronco;
-    return imgFolha;
-}
 
 // --- Assets ---
 let assetsLoaded = 0;
-const onAssetLoad = () => { if (++assetsLoaded === 5) { updateInventoryUI(); update(); } };
+const onAssetLoad = () => { if (++assetsLoaded === 5) { generateTrees(); updateInventoryUI(); update(); } };
 
-const imgGrama = new Image(); imgGrama.onload = onAssetLoad; imgGrama.src = "https://st2.depositphotos.com/1796420/8408/v/450/depositphotos_84083416-stock-illustration-texture-for-platformers-pixel-art.jpg";
-const imgTerra = new Image(); imgTerra.onload = onAssetLoad; imgTerra.src = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTRtCbeyZC6PjgiaDttQFYo4r4TUHIJFCdumA&s";
-const imgPedra = new Image(); imgPedra.onload = onAssetLoad; imgPedra.src = "https://i.pinimg.com/236x/d3/5c/0c/d35c0c58fff90987e9532e808ded0008.jpg";
-const imgTronco = new Image(); imgTronco.onload = onAssetLoad; imgTronco.src = "https://i.pinimg.com/736x/10/61/7b/10617b804bd2581499fcbea1426439f1.jpg";
-const imgFolha = new Image(); imgFolha.onload = onAssetLoad; imgFolha.src = "https://i.pinimg.com/1200x/09/c5/2d/09c52d89d8086495ab609332e6d55e85.jpg";
+const imgGrama = new Image(); imgGrama.onload = onAssetLoad; imgGrama.src = "https://i.ibb.co/vYm68YV/grass.png";
+const imgTerra = new Image(); imgTerra.onload = onAssetLoad; imgTerra.src = "https://i.ibb.co/f47Z4m0/dirt.png";
+const imgPedra = new Image(); imgPedra.onload = onAssetLoad; imgPedra.src = "https://i.ibb.co/M6X8f5Y/stone.png";
+const imgTronco = new Image(); imgTronco.onload = onAssetLoad; imgTronco.src = "https://i.ibb.co/9G738M6/wood.png";
+const imgFolha = new Image(); imgFolha.onload = onAssetLoad; imgFolha.src = "https://i.ibb.co/yYy8mZ5/leaves.png";
 
 // --- Mundo ---
 const WORLD_COLS = 200, WORLD_ROWS = 60;
@@ -110,15 +77,43 @@ let world = [], worldDamage = [], treeWorld = [];
 for (let y = 0; y < WORLD_ROWS; y++) {
     world[y] = []; worldDamage[y] = []; treeWorld[y] = [];
     for (let x = 0; x < WORLD_COLS; x++) {
-        treeWorld[y][x] = 0;
-        let type = (y === 15) ? 1 : (y > 15 && y < 30) ? 2 : (y >= 30) ? 3 : 0;
+        let type = (y === 25) ? 1 : (y > 25 && y < 35) ? 2 : (y >= 35) ? 3 : 0;
         world[y][x] = type;
+        treeWorld[y][x] = 0;
         worldDamage[y][x] = type !== 0 ? DURABILITY[type] : 0;
     }
 }
 
-// --- Jogador e Inputs ---
-const player = { x: WORLD_WIDTH / 2, y: 400, w: 22, h: 38, vx: 0, vy: 0, speed: 5, jump: -11, onGround: false };
+function generateTrees() {
+    for (let x = 5; x < WORLD_COLS - 5; x += Math.floor(Math.random() * 10) + 5) {
+        let height = 4 + Math.floor(Math.random() * 3);
+        let groundY = 25;
+        // Tronco
+        for (let i = 1; i <= height; i++) {
+            treeWorld[groundY - i][x] = 4;
+            worldDamage[groundY - i][x] = DURABILITY[4];
+        }
+        // Folhas
+        for (let fy = -2; fy <= 0; fy++) {
+            for (let fx = -2; fx <= 2; fx++) {
+                if (treeWorld[groundY - height + fy]) {
+                    treeWorld[groundY - height + fy][x + fx] = 5;
+                    worldDamage[groundY - height + fy][x + fx] = DURABILITY[5];
+                }
+            }
+        }
+    }
+}
+
+// --- Jogador ---
+const player = { 
+    x: WORLD_WIDTH / 2, y: 800, 
+    w: 24, h: 38, 
+    vx: 0, vy: 0, 
+    speed: 5, jumpPower: -12, 
+    onGround: false 
+};
+
 const keys = {};
 const camera = { x: 0, y: 0 };
 let isMouseDown = false, isRightMouseDown = false, mousePos = { x: 0, y: 0 };
@@ -131,7 +126,7 @@ window.onkeyup = (e) => keys[e.code] = false;
 canvas.onmousedown = (e) => { if (e.button === 0) isMouseDown = true; if (e.button === 2) isRightMouseDown = true; };
 window.onmouseup = (e) => { if (e.button === 0) isMouseDown = false; if (e.button === 2) isRightMouseDown = false; };
 canvas.onmousemove = (e) => { mousePos.x = e.clientX + camera.x; mousePos.y = e.clientY + camera.y; };
-canvas.oncontextmenu = (e) => e.preventDefault(); // Desativa menu do botão direito
+canvas.oncontextmenu = (e) => e.preventDefault();
 
 function isSolid(px, py) {
     const gx = Math.floor(px / TILE_SIZE), gy = Math.floor(py / TILE_SIZE);
@@ -139,61 +134,68 @@ function isSolid(px, py) {
 }
 
 function update() {
-    // Movimento
+    // Horizontal
     player.vx = keys['KeyA'] ? -player.speed : keys['KeyD'] ? player.speed : 0;
     player.x += player.vx;
-    if (isSolid(player.x, player.y + 2) || isSolid(player.x, player.y + player.h - 2)) player.x = (Math.floor(player.x / TILE_SIZE) + 1) * TILE_SIZE;
-    if (isSolid(player.x + player.w, player.y + 2) || isSolid(player.x + player.w, player.y + player.h - 2)) player.x = (Math.floor((player.x + player.w) / TILE_SIZE)) * TILE_SIZE - player.w;
+    if (isSolid(player.x, player.y + 4) || isSolid(player.x, player.y + player.h - 4)) player.x = (Math.floor(player.x / TILE_SIZE) + 1) * TILE_SIZE;
+    if (isSolid(player.x + player.w, player.y + 4) || isSolid(player.x + player.w, player.y + player.h - 4)) player.x = (Math.floor((player.x + player.w) / TILE_SIZE)) * TILE_SIZE - player.w;
 
-    player.vy += 0.55; player.y += player.vy; player.onGround = false;
-    if (isSolid(player.x + 2, player.y + player.h)) {
+    // Gravidade e Pulo
+    player.vy += 0.6;
+    player.y += player.vy;
+    player.onGround = false;
+
+    if (isSolid(player.x + 4, player.y + player.h) || isSolid(player.x + player.w - 4, player.y + player.h)) {
         player.y = Math.floor((player.y + player.h) / TILE_SIZE) * TILE_SIZE - player.h;
-        player.vy = 0; player.onGround = true;
+        player.vy = 0;
+        player.onGround = true;
     }
 
+    if (player.onGround && (keys['Space'] || keys['KeyW'])) {
+        player.vy = player.jumpPower;
+        player.onGround = false;
+    }
+
+    // Interação com Blocos
     const gx = Math.floor(mousePos.x / TILE_SIZE);
     const gy = Math.floor(mousePos.y / TILE_SIZE);
-    const dist = Math.sqrt(Math.pow(mousePos.x - (player.x + player.w/2), 2) + Math.pow(mousePos.y - (player.y + player.h/2), 2));
+    const dist = Math.hypot(mousePos.x - (player.x + player.w/2), mousePos.y - (player.y + player.h/2));
 
-    if (dist <= REACH_DISTANCE) {
-        // MINERAR (Botão Esquerdo)
+    if (dist <= REACH_DISTANCE && world[gy]) {
         if (isMouseDown) {
-            if (world[gy] && world[gy][gx] !== 0) {
+            let targetLayer = world[gy][gx] !== 0 ? world : (treeWorld[gy][gx] !== 0 ? treeWorld : null);
+            if (targetLayer) {
                 worldDamage[gy][gx]--;
-                if (worldDamage[gy][gx] <= 0) { inventory[world[gy][gx]]++; world[gy][gx] = 0; updateInventoryUI(); }
-            } else if (treeWorld[gy] && treeWorld[gy][gx] !== 0) {
-                worldDamage[gy][gx]--;
-                if (worldDamage[gy][gx] <= 0) { inventory[treeWorld[gy][gx]]++; treeWorld[gy][gx] = 0; updateInventoryUI(); }
-            }
-        }
-        // CONSTRUIR (Botão Direito)
-        if (isRightMouseDown && inventory[selectedSlot] > 0) {
-            if (world[gy] && world[gy][gx] === 0 && treeWorld[gy][gx] === 0) {
-                // Checa se o bloco não vai prender o jogador
-                const blockRect = { x: gx * TILE_SIZE, y: gy * TILE_SIZE, w: TILE_SIZE, h: TILE_SIZE };
-                const playerRect = { x: player.x, y: player.y, w: player.w, h: player.h };
-                
-                if (!(playerRect.x < blockRect.x + blockRect.w && playerRect.x + playerRect.w > blockRect.x &&
-                      playerRect.y < blockRect.y + blockRect.h && playerRect.y + playerRect.h > blockRect.y)) {
-                    world[gy][gx] = selectedSlot;
-                    worldDamage[gy][gx] = DURABILITY[selectedSlot];
-                    inventory[selectedSlot]--;
+                if (worldDamage[gy][gx] <= 0) {
+                    inventory[targetLayer[gy][gx]]++;
+                    targetLayer[gy][gx] = 0;
                     updateInventoryUI();
                 }
             }
         }
+        if (isRightMouseDown && inventory[selectedSlot] > 0 && world[gy][gx] === 0) {
+             world[gy][gx] = selectedSlot;
+             worldDamage[gy][gx] = DURABILITY[selectedSlot];
+             inventory[selectedSlot]--;
+             updateInventoryUI();
+        }
     }
 
-    camera.x = Math.max(0, Math.min(player.x - canvas.width / 2, WORLD_WIDTH - canvas.width));
-    camera.y = Math.max(0, Math.min(player.y - canvas.height / 2, WORLD_HEIGHT - canvas.height));
+    camera.x += (player.x - canvas.width / 2 - camera.x) * 0.1;
+    camera.y += (player.y - canvas.height / 2 - camera.y) * 0.1;
+
     draw();
     requestAnimationFrame(update);
 }
 
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#87CEEB'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
+    // Fundo (Céu)
+    let grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    grad.addColorStop(0, "#1e90ff");
+    grad.addColorStop(1, "#87ceeb");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
@@ -202,27 +204,48 @@ function draw() {
 
     for (let y = sR; y < eR; y++) {
         for (let x = sC; x < eC; x++) {
-            if (y >= 15) {
-                ctx.fillStyle = (y < 30) ? "#2c1e14" : "#1a1a1a"; 
+            if (y >= 25 && (!world[y] || world[y][x] === 0)) {
+                ctx.fillStyle = (y < 35) ? "#3d2b1f" : "#222"; 
                 ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             }
+            // Árvores
             if (treeWorld[y] && treeWorld[y][x] !== 0) {
-                ctx.globalAlpha = 0.8;
-                ctx.drawImage(treeWorld[y][x] === 4 ? imgTronco : imgFolha, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                ctx.globalAlpha = 1;
-            }
-            if (world[y] && world[y][x] !== 0) {
-                let img = world[y][x] === 1 ? imgGrama : (world[y][x] === 2 ? imgTerra : imgPedra);
+                let img = treeWorld[y][x] === 4 ? imgTronco : imgFolha;
                 ctx.drawImage(img, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                if (worldDamage[y][x] < DURABILITY[world[y][x]]) {
-                    ctx.strokeStyle = "red"; ctx.strokeRect(x * TILE_SIZE + 5, y * TILE_SIZE + 5, TILE_SIZE - 10, TILE_SIZE - 10);
-                }
+            }
+            // Blocos Sólidos
+            if (world[y] && world[y][x] !== 0) {
+                let img = world[y][x] === 1 ? imgGrama : (world[y][x] === 2 ? imgTerra : (world[y][x] === 3 ? imgPedra : (world[y][x] === 4 ? imgTronco : imgFolha)));
+                ctx.drawImage(img, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             }
         }
     }
 
-    ctx.fillStyle = '#FF6347'; ctx.fillRect(player.x, player.y, player.w, player.h);
+    // Personagem
+    ctx.fillStyle = '#ffeb3b';
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+    ctx.strokeStyle = '#000';
+    ctx.strokeRect(player.x, player.y, player.w, player.h);
+
     ctx.restore();
+}
+
+function updateInventoryUI() {
+    for (let i = 1; i <= 5; i++) {
+        const slot = document.getElementById(`slot-${i}`);
+        slot.querySelector('.count').innerText = inventory[i];
+        slot.classList.toggle('selected', selectedSlot === i);
+        if (inventory[i] > 0 && !slot.querySelector('img')) {
+            const img = getImgByType(i).cloneNode();
+            slot.appendChild(img);
+        } else if (inventory[i] <= 0 && slot.querySelector('img')) {
+            slot.querySelector('img').remove();
+        }
+    }
+}
+
+function getImgByType(t) {
+    return [null, imgGrama, imgTerra, imgPedra, imgTronco, imgFolha][t];
 }
 </script>
 </body>
