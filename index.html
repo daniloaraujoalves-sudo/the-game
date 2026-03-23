@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria - Corrigido</title>
+    <title>Mini Terraria - Pro</title>
     <style>
         body { margin: 0; overflow: hidden; background: #4da0ff; font-family: 'Segoe UI', sans-serif; }
         canvas { display: block; cursor: crosshair; }
@@ -32,7 +32,7 @@
 <body>
 
 <div class="info">
-    <b>ESQUERDO:</b> Minerar | <b>DIREITO:</b> Construir<br>
+    <b>ESQUERDO:</b> Minerar (Segure) | <b>DIREITO:</b> Construir<br>
     <b>W / ESPAÇO:</b> Pular | <b>1-5:</b> Itens | <b>A, D:</b> Mover
 </div>
 
@@ -54,9 +54,10 @@ canvas.height = window.innerHeight;
 
 const TILE_SIZE = 40;
 const REACH_DISTANCE = TILE_SIZE * 6;
-const DURABILITY = { 1: 5, 2: 5, 3: 15, 4: 10, 5: 3 }; 
+// Durabilidade dos blocos (quantos frames leva para quebrar)
+const DURABILITY = { 1: 15, 2: 15, 3: 40, 4: 25, 5: 10 }; 
 
-// --- GERAÇÃO DE TEXTURAS VIA CÓDIGO (Anti-Bug) ---
+// --- GERAÇÃO DE TEXTURAS ---
 function createTexture(color1, color2, pattern = "block") {
     const tCanvas = document.createElement('canvas');
     tCanvas.width = 16; tCanvas.height = 16;
@@ -83,55 +84,68 @@ const tex = {
     5: createTexture("#2e7d32", "#1b5e20", "leaves") // Folhas
 };
 
-// --- Configurações do Mundo ---
-const WORLD_COLS = 150, WORLD_ROWS = 60;
-const WORLD_WIDTH = WORLD_COLS * TILE_SIZE, WORLD_HEIGHT = WORLD_ROWS * TILE_SIZE;
+// --- CONFIGURAÇÃO DO MUNDO ---
+const WORLD_COLS = 200, WORLD_ROWS = 80;
 let world = [], worldDamage = [], treeWorld = [];
 
+// Gerador de Relevo (Senoidal)
 for (let y = 0; y < WORLD_ROWS; y++) {
     world[y] = []; worldDamage[y] = []; treeWorld[y] = [];
     for (let x = 0; x < WORLD_COLS; x++) {
-        let type = (y === 30) ? 1 : (y > 30 && y < 40) ? 2 : (y >= 40) ? 3 : 0;
+        // Cria montanhas suaves usando Math.sin
+        let surfaceY = Math.floor(35 + Math.sin(x * 0.1) * 5 + Math.sin(x * 0.05) * 2);
+        
+        let type = 0;
+        if (y === surfaceY) type = 1;
+        else if (y > surfaceY && y < surfaceY + 7) type = 2;
+        else if (y >= surfaceY + 7) type = 3;
+
         world[y][x] = type;
         treeWorld[y][x] = 0;
         worldDamage[y][x] = type !== 0 ? DURABILITY[type] : 0;
     }
 }
 
-// Plantar árvores
-for (let x = 5; x < WORLD_COLS - 5; x += Math.floor(Math.random() * 8) + 5) {
-    let h = 4 + Math.floor(Math.random() * 3);
-    for (let i = 1; i <= h; i++) treeWorld[30 - i][x] = 4; // Tronco
-    for (let fy = -2; fy <= 0; fy++) {
-        for (let fx = -2; fx <= 2; fx++) {
-            if (30-h+fy >= 0) treeWorld[30 - h + fy][x + fx] = 5; // Folhas
+// Gerar Árvores nas superfícies de grama
+for (let x = 10; x < WORLD_COLS - 10; x += Math.floor(Math.random() * 10) + 7) {
+    let surfaceY = -1;
+    for(let y=0; y < WORLD_ROWS; y++) { if(world[y][x] === 1) { surfaceY = y; break; } }
+    
+    if(surfaceY !== -1) {
+        let h = 4 + Math.floor(Math.random() * 3);
+        for (let i = 1; i <= h; i++) treeWorld[surfaceY - i][x] = 4;
+        for (let fy = -2; fy <= 0; fy++) {
+            for (let fx = -2; fx <= 2; fx++) {
+                if (surfaceY-h+fy >= 0) treeWorld[surfaceY - h + fy][x + fx] = 5;
+            }
         }
     }
 }
 
-// --- Jogador ---
+// --- JOGADOR ---
 const player = { 
-    x: WORLD_WIDTH / 2, y: 1000, 
+    x: (WORLD_COLS * TILE_SIZE) / 2, y: 0, 
     w: 24, h: 38, 
     vx: 0, vy: 0, 
-    speed: 5, jump: -12, 
+    speed: 5, jump: -11, 
     onGround: false 
 };
 
-let inventory = { 1: 20, 2: 20, 3: 10, 4: 10, 5: 10 };
+let inventory = { 1: 10, 2: 10, 3: 0, 4: 0, 5: 0 };
 let selectedSlot = 1;
 const keys = {};
 const camera = { x: 0, y: 0 };
 let isMouseDown = false, isRightMouseDown = false, mousePos = { x: 0, y: 0 };
 
-window.onkeydown = (e) => {
-    keys[e.code] = true;
-    if (e.key >= '1' && e.key <= '5') { selectedSlot = parseInt(e.key); updateUI(); }
-};
+window.onkeydown = (e) => { keys[e.code] = true; if (e.key >= '1' && e.key <= '5') { selectedSlot = parseInt(e.key); updateUI(); } };
 window.onkeyup = (e) => keys[e.code] = false;
 canvas.onmousedown = (e) => { if (e.button === 0) isMouseDown = true; if (e.button === 2) isRightMouseDown = true; };
 window.onmouseup = (e) => { if (e.button === 0) isMouseDown = false; if (e.button === 2) isRightMouseDown = false; };
-canvas.onmousemove = (e) => { mousePos.x = e.clientX + camera.x; mousePos.y = e.clientY + camera.y; };
+canvas.onmousemove = (e) => { 
+    const rect = canvas.getBoundingClientRect();
+    mousePos.x = e.clientX - rect.left + camera.x; 
+    mousePos.y = e.clientY - rect.top + camera.y; 
+};
 canvas.oncontextmenu = (e) => e.preventDefault();
 
 function isSolid(px, py) {
@@ -140,53 +154,64 @@ function isSolid(px, py) {
 }
 
 function update() {
-    // Movimento Lateral
+    // Movimento Lateral com Colisão Precisa
     player.vx = keys['KeyA'] ? -player.speed : keys['KeyD'] ? player.speed : 0;
     player.x += player.vx;
-    // Colisão Lateral simples
-    if (isSolid(player.x, player.y + 5) || isSolid(player.x, player.y + player.h - 5)) player.x += player.speed;
-    if (isSolid(player.x + player.w, player.y + 5) || isSolid(player.x + player.w, player.y + player.h - 5)) player.x -= player.speed;
+    
+    if (isSolid(player.x, player.y + 2) || isSolid(player.x, player.y + player.h - 2)) player.x = (Math.floor(player.x / TILE_SIZE) + 1) * TILE_SIZE;
+    if (isSolid(player.x + player.w, player.y + 2) || isSolid(player.x + player.w, player.y + player.h - 2)) player.x = Math.floor((player.x + player.w) / TILE_SIZE) * TILE_SIZE - player.w;
 
-    // Pulo e Gravidade
-    player.vy += 0.6;
+    // Gravidade e Pulo
+    player.vy += 0.5;
     player.y += player.vy;
     player.onGround = false;
 
-    if (isSolid(player.x + 5, player.y + player.h) || isSolid(player.x + player.w - 5, player.y + player.h)) {
+    if (isSolid(player.x + 4, player.y + player.h) || isSolid(player.x + player.w - 4, player.y + player.h)) {
         player.y = Math.floor((player.y + player.h) / TILE_SIZE) * TILE_SIZE - player.h;
         player.vy = 0;
         player.onGround = true;
     }
-
-    if (player.onGround && (keys['Space'] || keys['KeyW'])) {
-        player.vy = player.jump;
+    if (isSolid(player.x + 4, player.y) || isSolid(player.x + player.w - 4, player.y)) {
+        player.y = (Math.floor(player.y / TILE_SIZE) + 1) * TILE_SIZE;
+        player.vy = 0;
     }
 
-    // Mineração e Construção
+    if (player.onGround && (keys['Space'] || keys['KeyW'])) player.vy = player.jump;
+
+    // Mineração (Com Durabilidade)
     const gx = Math.floor(mousePos.x / TILE_SIZE);
     const gy = Math.floor(mousePos.y / TILE_SIZE);
     const dist = Math.hypot(mousePos.x - (player.x + player.w/2), mousePos.y - (player.y + player.h/2));
 
-    if (dist <= REACH_DISTANCE && world[gy]) {
+    if (dist <= REACH_DISTANCE && world[gy] && world[gy][gx] !== undefined) {
         if (isMouseDown) {
             if (world[gy][gx] !== 0) {
-                inventory[world[gy][gx]]++;
-                world[gy][gx] = 0;
-                updateUI();
+                worldDamage[gy][gx]--;
+                if(worldDamage[gy][gx] <= 0) {
+                    inventory[world[gy][gx]]++;
+                    world[gy][gx] = 0;
+                    updateUI();
+                }
             } else if (treeWorld[gy][gx] !== 0) {
                 inventory[treeWorld[gy][gx]]++;
                 treeWorld[gy][gx] = 0;
                 updateUI();
             }
         }
+        // Construção
         if (isRightMouseDown && inventory[selectedSlot] > 0 && world[gy][gx] === 0 && treeWorld[gy][gx] === 0) {
-            world[gy][gx] = selectedSlot;
-            inventory[selectedSlot]--;
-            updateUI();
+            // Impedir construir em cima do jogador
+            const pGx = Math.floor((player.x + player.w/2)/TILE_SIZE);
+            const pGy = Math.floor((player.y + player.h/2)/TILE_SIZE);
+            if(gx !== pGx || gy !== pGy) {
+                world[gy][gx] = selectedSlot;
+                worldDamage[gy][gx] = DURABILITY[selectedSlot];
+                inventory[selectedSlot]--;
+                updateUI();
+            }
         }
     }
 
-    // Suavização da Câmera
     camera.x += (player.x - canvas.width / 2 - camera.x) * 0.1;
     camera.y += (player.y - canvas.height / 2 - camera.y) * 0.1;
 
@@ -195,34 +220,32 @@ function update() {
 }
 
 function draw() {
-    // Fundo Gradiente (Céu)
-    let grd = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    grd.addColorStop(0, "#00aaff");
-    grd.addColorStop(1, "#ffffff");
-    ctx.fillStyle = grd;
+    ctx.fillStyle = "#4da0ff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
-    const sC = Math.floor(camera.x / TILE_SIZE), eC = sC + Math.ceil(canvas.width / TILE_SIZE) + 1;
-    const sR = Math.floor(camera.y / TILE_SIZE), eR = sR + Math.ceil(canvas.height / TILE_SIZE) + 1;
+    const sC = Math.floor(camera.x / TILE_SIZE) - 1, eC = sC + Math.ceil(canvas.width / TILE_SIZE) + 2;
+    const sR = Math.floor(camera.y / TILE_SIZE) - 1, eR = sR + Math.ceil(canvas.height / TILE_SIZE) + 2;
 
     for (let y = sR; y < eR; y++) {
         if (!world[y]) continue;
         for (let x = sC; x < eC; x++) {
-            // Desenhar fundo de terra se estiver fundo
-            if (y > 30 && world[y][x] === 0) {
-                ctx.fillStyle = "rgba(40, 20, 10, 0.4)";
+            // Background de caverna
+            if (y > 35 && world[y][x] === 0) {
+                ctx.fillStyle = "rgba(30, 15, 5, 0.3)";
                 ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             }
-            // Árvores (Camada de trás)
-            if (treeWorld[y][x] !== 0) {
-                ctx.drawImage(tex[treeWorld[y][x]], x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            }
-            // Blocos do Mundo
+            if (treeWorld[y][x] !== 0) ctx.drawImage(tex[treeWorld[y][x]], x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             if (world[y][x] !== 0) {
                 ctx.drawImage(tex[world[y][x]], x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                // Efeito visual de quebra
+                if(worldDamage[y][x] < DURABILITY[world[y][x]]) {
+                    ctx.fillStyle = "rgba(0,0,0,0.4)";
+                    let breakSize = (1 - worldDamage[y][x] / DURABILITY[world[y][x]]) * TILE_SIZE;
+                    ctx.fillRect(x * TILE_SIZE + (TILE_SIZE-breakSize)/2, y * TILE_SIZE + (TILE_SIZE-breakSize)/2, breakSize, breakSize);
+                }
             }
         }
     }
@@ -230,6 +253,10 @@ function draw() {
     // Jogador
     ctx.fillStyle = "#ff5722";
     ctx.fillRect(player.x, player.y, player.w, player.h);
+    // Olhos do jogador para dar direção
+    ctx.fillStyle = "white";
+    let eyeDir = player.vx >= 0 ? 12 : 2;
+    ctx.fillRect(player.x + eyeDir, player.y + 6, 8, 8);
     
     ctx.restore();
 }
@@ -240,10 +267,9 @@ function updateUI() {
         slot.querySelector('.count').innerText = inventory[i];
         slot.classList.toggle('selected', selectedSlot === i);
         if (!slot.querySelector('canvas')) {
-            const icon = tex[i];
             const clone = document.createElement('canvas');
             clone.width = 16; clone.height = 16;
-            clone.getContext('2d').drawImage(icon, 0, 0);
+            clone.getContext('2d').drawImage(tex[i], 0, 0);
             slot.appendChild(clone);
         }
     }
