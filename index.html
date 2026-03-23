@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria - Limites Corrigidos</title>
+    <title>Mini Terraria - Mundo Expandido (60.000px)</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
         canvas { display: block; cursor: crosshair; }
@@ -32,8 +32,8 @@
 <body>
 
 <div class="info">
-    <b>A, D:</b> Mover | <b>W:</b> Pular | <b>LIMITES:</b> 0 a 6000px<br>
-    <b>Dia/Noite:</b> Ativado | <b>1-5:</b> Itens
+    <b>A, D:</b> Mover | <b>W:</b> Pular | <b>Mapa:</b> 60.000px<br>
+    <b>Clique Esq:</b> Minerar | <b>Clique Dir:</b> Construir
 </div>
 
 <div id="inventory-ui">
@@ -52,14 +52,15 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
+// --- CONFIGURAÇÕES DO MUNDO ---
 const TILE_SIZE = 40;
-const WORLD_COLS = 150; // Largura do mundo (6000 pixels)
-const WORLD_ROWS = 60;
+const WORLD_COLS = 1500; // 1500 * 40 = 60.000 pixels de largura!
+const WORLD_ROWS = 80;   // Aumentado para dar mais profundidade
 const REACH_DISTANCE = TILE_SIZE * 5;
 const DURABILITY = { 1: 15, 2: 15, 3: 40, 4: 25, 5: 10 };
 
-let gameTime = 1200;
-const DAY_LENGTH = 5000;
+let gameTime = 1500;
+const DAY_LENGTH = 8000;
 
 // --- TEXTURAS ---
 const tex = {};
@@ -84,79 +85,112 @@ function initTextures() {
     }
 }
 
-// --- MUNDO ---
-let world = [], worldDamage = [];
+// --- GERAÇÃO DO MUNDO E ÁRVORES ---
+let world = [], worldDamage = [], treeWorld = [];
 function initWorld() {
+    // 1. Gerar o terreno básico
     for (let y = 0; y < WORLD_ROWS; y++) {
-        world[y] = []; worldDamage[y] = [];
+        world[y] = []; worldDamage[y] = []; treeWorld[y] = [];
         for (let x = 0; x < WORLD_COLS; x++) {
-            let surfaceY = Math.floor(25 + Math.sin(x * 0.15) * 3);
-            let type = (y === surfaceY) ? 1 : (y > surfaceY && y < surfaceY + 10) ? 2 : (y >= surfaceY + 10) ? 3 : 0;
+            let surfaceY = Math.floor(35 + Math.sin(x * 0.1) * 5 + Math.cos(x * 0.05) * 2);
+            let type = (y === surfaceY) ? 1 : (y > surfaceY && y < surfaceY + 12) ? 2 : (y >= surfaceY + 12) ? 3 : 0;
             world[y][x] = type;
             worldDamage[y][x] = type !== 0 ? DURABILITY[type] : 0;
+            treeWorld[y][x] = 0;
+        }
+    }
+
+    // 2. Gerar Árvores Corrigidas
+    for (let x = 10; x < WORLD_COLS - 10; x += Math.floor(Math.random() * 8) + 6) {
+        if (Math.random() > 0.4) { // 60% de chance de ter árvore
+            // Encontrar a superfície
+            let groundY = -1;
+            for(let y = 0; y < WORLD_ROWS; y++) {
+                if(world[y][x] === 1) { groundY = y; break; }
+            }
+
+            if (groundY > 10) { // Garantir que tem espaço para crescer
+                let trunkHeight = 4 + Math.floor(Math.random() * 3);
+                // Desenhar Tronco
+                for(let i = 1; i <= trunkHeight; i++) {
+                    treeWorld[groundY - i][x] = 4;
+                }
+                // Desenhar Folhas (Copa)
+                let leafTop = groundY - trunkHeight;
+                for(let ly = -2; ly <= 0; ly++) {
+                    for(let lx = -2; lx <= 2; lx++) {
+                        if (treeWorld[leafTop + ly]) {
+                            // Não sobrepor tronco e criar formato arredondado
+                            if (!(ly === -2 && (lx === -2 || lx === 2))) {
+                                if (treeWorld[leafTop + ly][x + lx] === 0) {
+                                    treeWorld[leafTop + ly][x + lx] = 5;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 // --- JOGADOR ---
 const player = { 
-    x: (WORLD_COLS * TILE_SIZE) / 2, y: 0, 
+    x: 2000, y: 0, 
     w: 22, h: 36, 
     vx: 0, vy: 0, 
-    speed: 5, jump: -11, 
+    speed: 5.5, jump: -11.5, 
     onGround: false 
 };
 
-let inventory = { 1: 10, 2: 10, 3: 0, 4: 0, 5: 0 };
+let inventory = { 1: 50, 2: 50, 3: 0, 4: 0, 5: 0 };
 let selectedSlot = 1;
 const keys = {};
 const camera = { x: 0, y: 0 };
 let mousePos = { x: 0, y: 0 }, isMouseDown = false, isRightMouseDown = false;
 
-// --- LÓGICA DE COLISÃO COM TRAVA DE MAPA ---
 function isSolid(px, py) {
     const gx = Math.floor(px / TILE_SIZE);
     const gy = Math.floor(py / TILE_SIZE);
-    
-    // Se sair das bordas laterais ou do topo, não é sólido (vácuo)
     if (gx < 0 || gx >= WORLD_COLS || gy < 0) return false;
-    // Se cair no fundo do mundo, é sólido (morte/barreira)
     if (gy >= WORLD_ROWS) return true;
-
     return world[gy][gx] !== 0;
 }
 
+// --- INPUTS ---
 window.onkeydown = (e) => { keys[e.code] = true; if (e.key >= '1' && e.key <= '5') { selectedSlot = parseInt(e.key); updateUI(); } };
 window.onkeyup = (e) => keys[e.code] = false;
 canvas.onmousedown = (e) => { if (e.button === 0) isMouseDown = true; if (e.button === 2) isRightMouseDown = true; };
-window.onmouseup = (e) => { isMouseDown = false; isRightMouseDown = false; };
-canvas.onmousemove = (e) => { mousePos.x = e.clientX + camera.x; mousePos.y = e.clientY + camera.y; };
+window.onmouseup = () => { isMouseDown = false; isRightMouseDown = false; };
+canvas.onmousemove = (e) => { 
+    const rect = canvas.getBoundingClientRect();
+    mousePos.x = e.clientX - rect.left + camera.x; 
+    mousePos.y = e.clientY - rect.top + camera.y; 
+};
 canvas.oncontextmenu = (e) => e.preventDefault();
 
 function update() {
     gameTime = (gameTime + 1) % DAY_LENGTH;
 
-    // 1. MOVIMENTO X
+    // FÍSICA X
     player.vx = keys['KeyA'] ? -player.speed : keys['KeyD'] ? player.speed : 0;
     player.x += player.vx;
 
-    // Trava de borda do mapa (X)
+    // Trava de Borda do Mundo (60.000px)
     if (player.x < 0) player.x = 0;
     if (player.x + player.w > WORLD_COLS * TILE_SIZE) player.x = WORLD_COLS * TILE_SIZE - player.w;
 
-    // Colisão X
     if (isSolid(player.x, player.y + 4) || isSolid(player.x + player.w, player.y + 4) ||
         isSolid(player.x, player.y + player.h - 4) || isSolid(player.x + player.w, player.y + player.h - 4)) {
         if (player.vx > 0) player.x = Math.floor((player.x + player.w) / TILE_SIZE) * TILE_SIZE - player.w - 0.1;
         else if (player.vx < 0) player.x = Math.floor(player.x / TILE_SIZE) * TILE_SIZE + TILE_SIZE + 0.1;
     }
 
-    // 2. MOVIMENTO Y
+    // FÍSICA Y
     player.vy += 0.6;
     player.y += player.vy;
     player.onGround = false;
 
-    // Colisão Y
     if (isSolid(player.x + 2, player.y + player.h) || isSolid(player.x + player.w - 2, player.y + player.h)) {
         player.y = Math.floor((player.y + player.h) / TILE_SIZE) * TILE_SIZE - player.h;
         player.vy = 0;
@@ -164,21 +198,27 @@ function update() {
     }
     if (player.onGround && (keys['Space'] || keys['KeyW'])) player.vy = player.jump;
 
-    // 3. MINERAÇÃO/CONSTRUÇÃO
+    // INTERAÇÃO
     const gx = Math.floor(mousePos.x / TILE_SIZE);
     const gy = Math.floor(mousePos.y / TILE_SIZE);
     const dist = Math.hypot(mousePos.x - (player.x + player.w/2), mousePos.y - (player.y + player.h/2));
 
     if (dist <= REACH_DISTANCE && gy >= 0 && gy < WORLD_ROWS && gx >= 0 && gx < WORLD_COLS) {
-        if (isMouseDown && world[gy][gx] !== 0) {
-            worldDamage[gy][gx]--;
-            if(worldDamage[gy][gx] <= 0) {
-                inventory[world[gy][gx]] = (inventory[world[gy][gx]] || 0) + 1;
-                world[gy][gx] = 0;
+        if (isMouseDown) {
+            if (world[gy][gx] !== 0) {
+                worldDamage[gy][gx]--;
+                if(worldDamage[gy][gx] <= 0) {
+                    inventory[world[gy][gx]] = (inventory[world[gy][gx]] || 0) + 1;
+                    world[gy][gx] = 0;
+                    updateUI();
+                }
+            } else if (treeWorld[gy][gx] !== 0) {
+                inventory[treeWorld[gy][gx]] = (inventory[treeWorld[gy][gx]] || 0) + 1;
+                treeWorld[gy][gx] = 0;
                 updateUI();
             }
         }
-        if (isRightMouseDown && world[gy][gx] === 0 && inventory[selectedSlot] > 0) {
+        if (isRightMouseDown && world[gy][gx] === 0 && treeWorld[gy][gx] === 0 && inventory[selectedSlot] > 0) {
             const pGx = Math.floor((player.x + player.w/2) / TILE_SIZE);
             const pGy = Math.floor((player.y + player.h/2) / TILE_SIZE);
             if(gx !== pGx || gy !== pGy) {
@@ -190,17 +230,18 @@ function update() {
         }
     }
 
-    // CAMERA
+    // CÂMERA SUAVE COM TRAVA
     camera.x += (player.x - canvas.width / 2 - camera.x) * 0.1;
     camera.y += (player.y - canvas.height / 2 - camera.y) * 0.1;
-    // Trava a camera para não mostrar o "vazio" fora do mapa
     camera.x = Math.max(0, Math.min(camera.x, WORLD_COLS * TILE_SIZE - canvas.width));
+    camera.y = Math.max(0, Math.min(camera.y, WORLD_ROWS * TILE_SIZE - canvas.height));
 
     draw();
     requestAnimationFrame(update);
 }
 
 function draw() {
+    // Céu Dinâmico
     let dayRatio = Math.sin((gameTime / DAY_LENGTH) * Math.PI * 2); 
     ctx.fillStyle = `rgb(0, ${Math.max(10, 60 + dayRatio * 100)}, ${Math.max(20, 100 + dayRatio * 155)})`;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -208,6 +249,7 @@ function draw() {
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
+    // Culling (Só desenha o que aparece na tela para não travar)
     const sC = Math.floor(camera.x / TILE_SIZE) - 1, eC = sC + Math.ceil(canvas.width / TILE_SIZE) + 2;
     const sR = Math.floor(camera.y / TILE_SIZE) - 1, eR = sR + Math.ceil(canvas.height / TILE_SIZE) + 2;
 
@@ -215,6 +257,19 @@ function draw() {
         if (y < 0 || y >= WORLD_ROWS) continue;
         for (let x = sC; x < eC; x++) {
             if (x < 0 || x >= WORLD_COLS) continue;
+            
+            // Fundo de caverna (paredes)
+            if (y > 35 && world[y][x] === 0) {
+                ctx.fillStyle = "rgba(20, 10, 5, 0.2)";
+                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
+
+            // Árvores
+            if (treeWorld[y][x] !== 0) {
+                ctx.drawImage(tex[treeWorld[y][x]], x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
+
+            // Blocos
             if (world[y][x] !== 0) {
                 ctx.drawImage(tex[world[y][x]], x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
                 if(worldDamage[y][x] < DURABILITY[world[y][x]]) {
@@ -222,18 +277,17 @@ function draw() {
                     let pct = 1 - (worldDamage[y][x] / DURABILITY[world[y][x]]);
                     ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE + (TILE_SIZE*(1-pct)), TILE_SIZE, TILE_SIZE*pct);
                 }
-            } else if (y > 28) {
-                ctx.fillStyle = "rgba(0,0,0,0.15)";
-                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             }
         }
     }
 
+    // Player
     ctx.fillStyle = "#ff5722";
     ctx.fillRect(player.x, player.y, player.w, player.h);
     ctx.restore();
 
-    let nightOpacity = Math.max(0, -dayRatio * 0.6);
+    // Filtro de Noite
+    let nightOpacity = Math.max(0, -dayRatio * 0.7);
     ctx.fillStyle = `rgba(0, 0, 30, ${nightOpacity})`;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
@@ -252,6 +306,7 @@ function updateUI() {
     }
 }
 
+// INICIAR
 initTextures();
 initWorld();
 updateUI();
