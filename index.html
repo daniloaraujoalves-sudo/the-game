@@ -454,6 +454,8 @@ function initWorld() {
             else if (y < surfaceY + 25) {
                 // Camada de transição
                 type = 2; // terra
+                else if (y > surfaceY + 40 && Math.random() < 0.02) type = 8; // minério de ferro
+else if (y > surfaceY + 70 && Math.random() < 0.015) type = 9; // carvão
             }
             // else → já é pedra (type = 3)
 
