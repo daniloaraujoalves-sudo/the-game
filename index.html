@@ -381,63 +381,89 @@ function initTextures() {
     }
 }
 
-// --- GERAÇÃO DE MUNDO COM BIOMAS ---
+// ====================== GERAÇÃO DE MUNDO COM BIOMAS ======================
 let world = [], worldDamage = [], treeWorld = [];
+
 function getBiome(x) {
     if (x < 1500 || x > WORLD_COLS - 1500) return "OCEANO";
-    let v = Math.sin(x * 0.01);
-    if (v > 0.6) return "AMAZONIA";
-    if (v < -0.6) return "DESERTO";
+    
+    const v = Math.sin(x * 0.01);
+    if (v > 0.65) return "AMAZONIA";
+    if (v < -0.65) return "DESERTO";
     return "FLORESTA";
 }
 
 function initWorld() {
+    // Inicializa arrays
     for (let y = 0; y < WORLD_ROWS; y++) {
         world[y] = new Int8Array(WORLD_COLS);
         worldDamage[y] = new Int16Array(WORLD_COLS);
-        treeWorld[y] = new Int8Array(WORLD_COLS);
+        treeWorld[y] = new Int8Array(WORLD_COLS); // 0 = sem árvore
     }
 
     for (let x = 0; x < WORLD_COLS; x++) {
-        let biome = getBiome(x);
+        const biome = getBiome(x);
         let surfaceY;
 
-        if (biome === "OCEANO") {
-            surfaceY = 60 + Math.floor(Math.sin(x * 0.05) * 2);
-            for(let y = surfaceY - 15; y < surfaceY; y++) world[y][x] = 7; // Água
-        } else if (biome === "DESERTO") {
-            surfaceY = Math.floor(40 + Math.sin(x * 0.05) * 2);
-        } else if (biome === "AMAZONIA") {
-            surfaceY = Math.floor(30 + Math.sin(x * 0.1) * 8);
-        } else {
-            surfaceY = Math.floor(35 + Math.sin(x * 0.1) * 5);
+        switch (biome) {
+            case "OCEANO":
+                surfaceY = 58 + Math.floor(Math.sin(x * 0.04) * 4); // ondas mais suaves
+                break;
+
+            case "DESERTO":
+                surfaceY = 42 + Math.floor(Math.sin(x * 0.06) * 3);
+                break;
+
+            case "AMAZONIA":
+                surfaceY = 28 + Math.floor(Math.sin(x * 0.09) * 11); // mais variação
+                break;
+
+            case "FLORESTA":
+            default:
+                surfaceY = 35 + Math.floor(Math.sin(x * 0.08) * 6);
+                break;
         }
+
+        // Garante que surfaceY fique dentro dos limites razoáveis
+        surfaceY = Math.max(15, Math.min(WORLD_ROWS - 30, surfaceY));
 
         for (let y = 0; y < WORLD_ROWS; y++) {
-            if (y < surfaceY) continue;
-            let type = 3; // Pedra padrão
-            if (y === surfaceY) type = (biome === "DESERTO" || biome === "OCEANO") ? 6 : 1;
-            else if (y < surfaceY + 10) type = (biome === "DESERTO") ? 6 : 2;
-            
-            world[y][x] = type;
-            worldDamage[y][x] = DURABILITY[type];
-        }
-
-        // Árvores (Apenas Floresta e Amazônia)
-        if ((biome === "FLORESTA" || biome === "AMAZONIA") && x % 8 === 0 && Math.random() > 0.4) {
-            let h = biome === "AMAZONIA" ? 8 + Math.random()*5 : 4 + Math.random()*3;
-            for(let i=1; i<=h; i++) if(world[surfaceY-i]) treeWorld[surfaceY-i][x] = 4;
-            // Folhas
-            let ly = Math.floor(surfaceY - h);
-            for(let fy=-3; fy<=0; fy++) {
-                for(let fx=-2; fx<=2; fx++) {
-                    if(treeWorld[ly+fy] && treeWorld[ly+fy][x+fx] === 0) treeWorld[ly+fy][x+fx] = 5;
-                }
+            if (y < surfaceY) {
+                // Ar / Céu
+                world[y][x] = 0;
+                worldDamage[y][x] = 0;
+                continue;
             }
+
+            let type = 3; // pedra padrão
+
+            if (y === surfaceY) {
+                // Bloco de superfície
+                if (biome === "OCEANO") {
+                    type = 7; // água
+                } else if (biome === "DESERTO") {
+                    type = 6; // areia
+                } else {
+                    type = 1; // grama
+                }
+            } 
+            else if (y < surfaceY + 8) {
+                // Camada logo abaixo da superfície
+                type = (biome === "DESERTO") ? 6 : 2; // areia ou terra
+            } 
+            else if (y < surfaceY + 25) {
+                // Camada de transição
+                type = 2; // terra
+            }
+            // else → já é pedra (type = 3)
+
+            world[y][x] = type;
+            worldDamage[y][x] = DURABILITY[type] || 0;
         }
     }
-}
 
+    console.log("Mundo gerado com sucesso! Tamanho:", WORLD_COLS, "x", WORLD_ROWS);
+}
 // --- JOGADOR ---
 const player = { x: 80000, y: 0, w: 20, h: 36, vx: 0, vy: 0, speed: 6, jump: -12, onGround: false };
 let inventory = { 1: 50, 2: 50, 6: 50, 4: 50 };
