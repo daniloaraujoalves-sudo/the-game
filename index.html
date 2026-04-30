@@ -2,230 +2,183 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Terraria JS - Advanced Caves</title>
+    <title>Terraria JS - Definitive Edition</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', monospace; user-select: none; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, sans-serif; user-select: none; }
         canvas { display: block; image-rendering: pixelated; cursor: crosshair; }
-        .ui-overlay { position: absolute; top: 20px; left: 20px; z-index: 100; pointer-events: none; color: white; }
-        #hp-bar { width: 200px; height: 15px; background: #222; border: 2px solid #555; margin-bottom: 5px; }
-        #hp-fill { width: 100%; height: 100%; background: #e74c3c; transition: width 0.2s; }
-        #hotbar { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; background: rgba(0,0,0,0.7); padding: 8px; border: 2px solid #444; }
-        .slot { width: 40px; height: 40px; background: #333; border: 2px solid #666; display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer; pointer-events: all; }
-        .slot.selected { border-color: #ff0; background: #444; }
-        .count { position: absolute; bottom: 0; right: 2px; font-size: 10px; text-shadow: 1px 1px #000; }
+        .ui { position: absolute; top: 20px; left: 20px; z-index: 100; pointer-events: none; }
+        #hp-bar { width: 220px; height: 18px; background: #1a1a1a; border: 2px solid #333; position: relative; }
+        #hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #d32f2f, #ff5252); box-shadow: 0 0 10px rgba(255,0,0,0.5); }
+        #hotbar { position: absolute; top: 50px; left: 20px; display: flex; gap: 4px; pointer-events: all; }
+        .slot { width: 44px; height: 44px; background: rgba(30,30,60,0.8); border: 2px solid #1a1a3a; display: flex; align-items: center; justify-content: center; position: relative; }
+        .slot.selected { border-color: #fbff00; background: rgba(60,60,120,0.9); }
+        .count { position: absolute; bottom: 1px; right: 3px; color: white; font-size: 11px; text-shadow: 1px 1px black; }
+        #seed-tag { position: absolute; bottom: 10px; right: 10px; color: rgba(255,255,255,0.3); font-size: 12px; }
     </style>
 </head>
 <body>
 
-<div class="ui-overlay">
+<div class="ui">
     <div id="hp-bar"><div id="hp-fill"></div></div>
-    <div id="info">Seed: 0 | Exploração Subterrânea</div>
 </div>
-
 <div id="hotbar"></div>
+<div id="seed-tag"></div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
+/** ENGINE CONFIG **/
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-/** CONFIGURAÇÕES E SEEDS **/
-const TILE_SIZE = 40;
-const WORLD_COLS = 800; // Aumentado para mais exploração
-const WORLD_ROWS = 150; // Mais fundo
-const SEEDS = [1234, 9876, 5555, 1010, 8888, 4321, 6789, 2468, 1357, 9999];
-const currentSeed = SEEDS[Math.floor(Math.random() * SEEDS.length)];
-document.getElementById('info').innerText = `Seed: ${currentSeed} | Use 'WAD' para mover`;
+const TILE_SIZE = 32; // Menor para caber mais mundo na tela
+const WORLD_W = 500;
+const WORLD_H = 150;
+const SEEDS = [777, 101, 505, 999, 123, 444, 888, 202, 303, 666];
+const SEED = SEEDS[Math.floor(Math.random() * SEEDS.length)];
+document.getElementById('seed-tag').innerText = "World Seed: " + SEED;
 
-let seedState = currentSeed;
-function sRandom() {
-    seedState = (seedState * 1664525 + 1013904223) % 4294967296;
-    return seedState / 4294967296;
+let world = [], walls = [], light = [];
+let drops = [], entities = [], particles = [];
+const tex = {};
+const player = { x: 8000, y: 1200, w: 20, h: 34, vx: 0, vy: 0, hp: 100, selected: 1, inv: {1:50, 2:50, 3:0, 4:0, 8:0} };
+const camera = { x: 0, y: 0 };
+const keys = {};
+let mouse = { x: 0, y: 0, down: false, right: false };
+
+/** GENERATOR (Simulando Perlin Noise com camadas de oitavas) **/
+function noise(x, freq) {
+    return Math.sin(x * freq + SEED) * 0.5 + Math.sin(x * freq * 0.5 + SEED * 0.5) * 0.25;
 }
 
-let world = [], worldDmg = [], treeWorld = [], lightMap = [];
-let drops = [], entities = [];
-let gameTime = 10000;
-const tex = {};
-const player = { x: 16000, y: 1000, w: 22, h: 38, vx: 0, vy: 0, hp: 100, selected: 1, inv: {1:30, 2:30, 3:0, 4:0, 8:0} };
-const keys = {};
-const camera = { x: 0, y: 0 };
-let mouse = { x: 0, y: 0, down: false, rightDown: false };
+function initWorld() {
+    for (let y = 0; y < WORLD_H; y++) {
+        world[y] = new Int8Array(WORLD_W);
+        walls[y] = new Int8Array(WORLD_W);
+        light[y] = new Float32Array(WORLD_W).fill(0);
+    }
+
+    for (let x = 0; x < WORLD_W; x++) {
+        // Superfície mais natural
+        let h = 45 + Math.floor(noise(x, 0.1) * 15 + noise(x, 0.02) * 25);
+        for (let y = 0; y < WORLD_H; y++) {
+            if (y > h) {
+                // Algoritmo de Cavernas (Ruído de Densidade)
+                let density = Math.sin(x * 0.1) + Math.sin(y * 0.1) + (sRandom() * 2 - 1);
+                let isCave = density > 1.2; 
+
+                if (!isCave) {
+                    world[y][x] = (y < h + 15) ? 2 : 3; // Dirt ou Stone
+                    if (y === h) world[y][x] = 1; // Grass
+                    if (y > 80 && sRandom() < 0.01) world[y][x] = 8; // Ore
+                }
+                walls[y][x] = (y < h + 15) ? 2 : 3; // Parede de fundo
+            }
+        }
+        // Árvores
+        if (x % 15 === 0 && sRandom() > 0.5) {
+            let th = 5 + Math.floor(sRandom() * 4);
+            for(let i=1; i<th; i++) if(h-i > 0) world[h-i][x] = 4; // Log
+            for(let ly=-2; ly<=0; ly++) for(let lx=-1; lx<=1; lx++) world[h-th+ly][x+lx] = 5; // Leaves
+        }
+    }
+}
+
+/** LIGHTING SYSTEM (Flood Fill de Luz) **/
+function updateLighting() {
+    // Reseta luz (sol alcança até a superfície)
+    for (let x = 0; x < WORLD_W; x++) {
+        let skyLight = 1.0;
+        for (let y = 0; y < WORLD_H; y++) {
+            if (world[y][x] !== 0 && world[y][x] !== 5) skyLight -= 0.2;
+            if (skyLight < 0) skyLight = 0;
+            light[y][x] = skyLight;
+        }
+    }
+    // Difusão simples para suavizar
+    for (let i = 0; i < 2; i++) {
+        for (let y = 1; y < WORLD_H-1; y++) {
+            for (let x = 1; x < WORLD_W-1; x++) {
+                let avg = (light[y][x] + light[y-1][x] + light[y+1][x] + light[y][x-1] + light[y][x+1]) / 5;
+                light[y][x] = avg;
+            }
+        }
+    }
+}
+
+function sRandom() {
+    let x = Math.sin(seedState++) * 10000;
+    return x - Math.floor(x);
+}
+let seedState = SEED;
 
 /** TEXTURAS **/
 function initTextures() {
-    const palette = {
-        1: ["#48b04d", "#2d6b30"], 2: ["#8b5a2b", "#5d3a1a"], 3: ["#7a7a7a", "#4a4a4a"],
-        4: ["#6b4423", "#3d2714"], 5: ["#2ecc71", "#27ae60"], 6: ["#e3c16f", "#bca158"], 8: ["#d3d3d3", "#7f8c8d"]
-    };
-    for (let id in palette) {
-        const t = document.createElement('canvas'); t.width = 16; t.height = 16;
-        const tc = t.getContext('2d');
-        tc.fillStyle = palette[id][0]; tc.fillRect(0,0,16,16);
-        tc.fillStyle = palette[id][1]; tc.globalAlpha = 0.3;
-        tc.fillRect(sRandom()*8, sRandom()*8, 5, 5);
+    const p = { 1: "#52ad56", 2: "#855428", 3: "#777", 4: "#634121", 5: "#2d9c3a", 8: "#d1d1d1" };
+    for (let id in p) {
+        let t = document.createElement('canvas'); t.width = 16; t.height = 16;
+        let c = t.getContext('2d');
+        c.fillStyle = p[id]; c.fillRect(0,0,16,16);
+        c.fillStyle = "rgba(0,0,0,0.2)"; c.fillRect(0,8,16,8);
         tex[id] = t;
     }
 }
 
-/** GERAÇÃO DE MUNDO COM CAVERNAS SINUOSAS **/
-function initWorld() {
-    for (let y = 0; y < WORLD_ROWS; y++) {
-        world[y] = new Int8Array(WORLD_COLS);
-        worldDmg[y] = new Int16Array(WORLD_COLS).fill(25);
-        treeWorld[y] = new Int8Array(WORLD_COLS);
-        lightMap[y] = new Float32Array(WORLD_COLS);
-    }
-
-    // 1. Relevo da Superfície
-    for (let x = 0; x < WORLD_COLS; x++) {
-        let surf = 40 + Math.floor(Math.sin(x * 0.05) * 8 + Math.sin(x * 0.01) * 15);
-        for (let y = surf; y < WORLD_ROWS; y++) {
-            let type = (y < surf + 20) ? 2 : 3;
-            if (y === surf) type = 1;
-            if (y > 90 && sRandom() < 0.015) type = 8;
-            world[y][x] = type;
-        }
-        if (x % 15 === 0 && sRandom() > 0.45) {
-            let h = 6 + Math.floor(sRandom() * 4);
-            for(let i=1; i<=h; i++) if(surf-i > 0) treeWorld[surf-i][x] = 4;
-            for(let ly=-2; ly<=0; ly++) for(let lx=-1; lx<=1; lx++) 
-                if(surf-h+ly > 0 && x+lx >= 0 && x+lx < WORLD_COLS) treeWorld[surf-h+ly][x+lx] = 5;
-        }
-    }
-
-    // 2. Sistema de Cavernas Avançado (Vermin Algorithm)
-    const numTunnels = 60;
-    for (let i = 0; i < numTunnels; i++) {
-        let cx = Math.floor(sRandom() * WORLD_COLS);
-        let cy = Math.floor(50 + sRandom() * (WORLD_ROWS - 60));
-        let angle = sRandom() * Math.PI * 2;
-        let tunnelLength = 50 + Math.floor(sRandom() * 150);
-        let radius = 1.5 + sRandom() * 2.5;
-
-        for (let step = 0; step < tunnelLength; step++) {
-            // Desenha o círculo da caverna
-            for (let dy = -Math.ceil(radius); dy <= radius; dy++) {
-                for (let dx = -Math.ceil(radius); dx <= radius; dx++) {
-                    let nx = Math.floor(cx + dx);
-                    let ny = Math.floor(cy + dy);
-                    if (nx >= 0 && nx < WORLD_COLS && ny >= 0 && ny < WORLD_ROWS) {
-                        if (dx*dx + dy*dy <= radius*radius) world[ny][nx] = 0;
-                    }
-                }
-            }
-            // Move o escavador
-            angle += (sRandom() - 0.5) * 0.8; // Curvatura
-            cx += Math.cos(angle) * 1.5;
-            cy += Math.sin(angle) * 1.5;
-            
-            // Ocasionalmente cria uma câmara maior
-            if (sRandom() < 0.05) radius = 3 + sRandom() * 4;
-            else radius = Math.max(1.5, radius * 0.95);
-            
-            if (cy < 35 || cy > WORLD_ROWS - 5) break;
-        }
-    }
-    updateLight();
-}
-
-function updateLight() {
-    for (let x = 0; x < WORLD_COLS; x++) {
-        let l = 1.0;
-        for (let y = 0; y < WORLD_ROWS; y++) {
-            if (world[y][x] !== 0) l -= 0.14; // Luz penetra um pouco mais
-            if (l < 0.1) l = 0.1;
-            lightMap[y][x] = l;
-        }
-    }
-}
-
-/** FÍSICA E INTERAÇÃO **/
-function isSolid(x, y) {
-    const gx = Math.floor(x/TILE_SIZE), gy = Math.floor(y/TILE_SIZE);
-    return world[gy] && world[gy][gx] !== 0;
-}
-
-function spawnMob() {
-    const dir = sRandom() > 0.5 ? 1 : -1;
-    const sx = player.x + (dir * (canvas.width/2 + 50));
-    if (sx > 0 && sx < WORLD_COLS * TILE_SIZE) {
-        entities.push({ x: sx, y: player.y - 200, w: 28, h: 20, vx: 0, vy: 0, hp: 40, jumpTimer: 0 });
-    }
-}
-
+/** LÓGICA PRINCIPAL **/
 function update() {
-    gameTime++;
-    // Player
-    player.vx = keys['KeyA'] ? -5.5 : keys['KeyD'] ? 5.5 : 0;
-    player.vy += 0.5;
+    // Física Player
+    player.vx = keys['KeyA'] ? -5 : keys['KeyD'] ? 5 : 0;
+    player.vy += 0.4;
     player.x += player.vx;
-    if(isSolid(player.x, player.y+5) || isSolid(player.x+player.w, player.y+5)) player.x -= player.vx;
+    if(checkColl(player.x, player.y)) player.x -= player.vx;
     player.y += player.vy;
-    if(isSolid(player.x+2, player.y+player.h) || isSolid(player.x+player.w-2, player.y+player.h)) {
-        player.y = Math.floor((player.y+player.h)/40)*40 - player.h;
+    if(checkColl(player.x, player.y)) {
+        player.y = Math.floor((player.y + player.h)/TILE_SIZE) * TILE_SIZE - player.h;
         player.vy = 0;
-        if(keys['Space'] || keys['KeyW']) player.vy = -11;
+        if(keys['Space'] || keys['KeyW']) player.vy = -10;
     }
 
-    // Ações
-    const mx = mouse.x + camera.x, my = mouse.y + camera.y;
-    const gx = Math.floor(mx/40), gy = Math.floor(my/40);
-    const dist = Math.hypot(mx-(player.x+10), my-(player.y+20));
+    // Interação
+    let mx = mouse.x + camera.x, my = mouse.y + camera.y;
+    let gx = Math.floor(mx/TILE_SIZE), gy = Math.floor(my/TILE_SIZE);
 
-    if (mouse.down) {
-        entities.forEach(en => { if(Math.hypot(en.x-mx, en.y-my) < 40) en.hp -= 3; });
-        if(dist < 250 && world[gy]) {
-            if(world[gy][gx] !== 0) {
-                worldDmg[gy][gx]--;
-                if(worldDmg[gy][gx] <= 0) {
-                    drops.push({x: mx, y: my, id: world[gy][gx], vy: -3, vx: (sRandom()-0.5)*4});
-                    world[gy][gx] = 0; updateLight();
-                }
-            } else if(treeWorld[gy][gx] !== 0) {
-                drops.push({x: mx, y: my, id: treeWorld[gy][gx], vy: -2, vx: (sRandom()-0.5)*2});
-                treeWorld[gy][gx] = 0;
+    if (mouse.down && world[gy] && world[gy][gx] !== 0) {
+        if(Math.hypot(mx - (player.x+10), my - (player.y+17)) < 200) {
+            let id = world[gy][gx];
+            if(id !== 0) {
+                spawnDrop(mx, my, id);
+                world[gy][gx] = 0;
+                updateLighting();
             }
         }
     }
-    if (mouse.rightDown && dist < 250 && world[gy] && world[gy][gx] === 0) {
-        if(player.inv[player.selected] > 0) {
+    
+    if (mouse.right && world[gy] && world[gy][gx] === 0) {
+        if(player.inv[player.selected] > 0 && Math.hypot(mx - (player.x+10), my - (player.y+17)) < 200) {
             world[gy][gx] = player.selected;
-            worldDmg[gy][gx] = 25;
-            player.inv[player.selected]--; updateLight(); updateUI();
+            player.inv[player.selected]--;
+            updateLighting();
+            updateUI();
         }
     }
 
-    // Mobs
-    if (gameTime % 450 === 0 && entities.length < 8) spawnMob();
+    // Slimes
+    if(Math.random() < 0.01 && entities.length < 5) {
+        entities.push({x: player.x + (Math.random()-0.5)*1000, y: player.y-200, hp: 50, vx: 0, vy: 0});
+    }
     entities.forEach((en, i) => {
-        en.vy += 0.4; en.x += en.vx; en.y += en.vy;
-        if(isSolid(en.x, en.y+en.h) || isSolid(en.x+en.w, en.y+en.h)) {
-            en.y = Math.floor((en.y+en.h)/40)*40 - en.h;
-            en.vy = 0;
-            if(en.jumpTimer-- <= 0) {
-                en.vy = -8 - sRandom()*2;
-                en.vx = (player.x > en.x ? 2.5 : -2.5);
-                en.jumpTimer = 60 + sRandom()*40;
-            }
-        }
-        if(Math.hypot(player.x-en.x, player.y-en.y) < 30) { 
-            player.hp -= 0.4; 
-            player.vx = (player.x > en.x ? 10 : -10); // Knockback
-        }
-        if(en.hp <= 0) { drops.push({x: en.x, y: en.y, id: 8, vy: -4, vx: 0}); entities.splice(i, 1); }
+        en.vy += 0.4; en.y += en.vy; en.x += en.vx;
+        if(checkColl(en.x, en.y)) { en.y -= en.vy; en.vy = -8; en.vx = (player.x > en.x ? 2 : -2); }
+        if(Math.hypot(player.x-en.x, player.y-en.y) < 30) player.hp -= 0.2;
+        if(en.hp <= 0) entities.splice(i, 1);
     });
 
-    // Itens
+    // Drops
     drops.forEach((d, i) => {
-        d.y += d.vy; d.vy += 0.2; d.x += d.vx;
-        if(isSolid(d.x, d.y+10)) { d.vy = 0; d.vx = 0; d.y = Math.floor((d.y+10)/40)*40-12; }
-        if(Math.hypot(player.x-d.x, player.y-d.y) < 50) { 
-            player.inv[d.id] = (player.inv[d.id]||0)+1; 
-            drops.splice(i,1); updateUI(); 
-        }
+        d.y += 2;
+        if(checkColl(d.x, d.y)) d.y -= 2;
+        if(Math.hypot(player.x-d.x, player.y-d.y) < 40) { player.inv[d.id]++; drops.splice(i,1); updateUI(); }
     });
 
     camera.x += (player.x - canvas.width/2 - camera.x) * 0.1;
@@ -235,58 +188,77 @@ function update() {
     requestAnimationFrame(update);
 }
 
+function checkColl(x, y) {
+    let gx = Math.floor((x+4)/TILE_SIZE), gy = Math.floor((y+player.h)/TILE_SIZE);
+    return world[gy] && world[gy][gx] !== 0 && world[gy][gx] !== 5;
+}
+
+function spawnDrop(x, y, id) { drops.push({x, y, id}); }
+
 function draw() {
-    const sky = Math.sin((gameTime/25000)*Math.PI);
-    ctx.fillStyle = `rgb(10, ${90*sky+10}, ${180*sky+30})`;
+    ctx.fillStyle = "#4a90e2";
     ctx.fillRect(0,0,canvas.width, canvas.height);
 
-    ctx.save(); ctx.translate(-camera.x, -camera.y);
-    
-    let xS = Math.floor(camera.x/40)-1, xE = xS + Math.ceil(canvas.width/40)+2;
-    let yS = Math.floor(camera.y/40)-1, yE = yS + Math.ceil(canvas.height/40)+2;
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y);
 
-    for(let y=Math.max(0, yS); y<Math.min(WORLD_ROWS, yE); y++) {
-        for(let x=xS; x<xE; x++) {
-            if(x<0 || x>=WORLD_COLS) continue;
-            let id = world[y][x] || treeWorld[y][x];
-            if(id) {
-                ctx.drawImage(tex[id], x*40, y*40, 40, 40);
-                ctx.fillStyle = `rgba(0,0,15,${1-lightMap[y][x]})`;
-                ctx.fillRect(x*40, y*40, 40, 40);
+    let x0 = Math.floor(camera.x/TILE_SIZE)-1, x1 = x0 + Math.ceil(canvas.width/TILE_SIZE)+2;
+    let y0 = Math.floor(camera.y/TILE_SIZE)-1, y1 = y0 + Math.ceil(canvas.height/TILE_SIZE)+2;
+
+    for(let y=Math.max(0, y0); y<Math.min(WORLD_H, y1); y++) {
+        for(let x=Math.max(0, x0); x<Math.min(WORLD_W, x1); x++) {
+            // Desenha Parede de Fundo
+            if (walls[y][x] !== 0) {
+                ctx.fillStyle = walls[y][x] === 2 ? "#3a2a1a" : "#2a2a2a";
+                ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
             }
+            // Desenha Bloco
+            let id = world[y][x];
+            if(id !== 0) {
+                ctx.drawImage(tex[id], x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
+            // Luz
+            ctx.fillStyle = `rgba(0,0,0,${1 - light[y][x]})`;
+            ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
     }
-    entities.forEach(en => { ctx.fillStyle = "#2ecc71"; ctx.fillRect(en.x, en.y, en.w, en.h); });
-    drops.forEach(d => { if(tex[d.id]) ctx.drawImage(tex[d.id], d.x, d.y, 16, 16); });
+
+    entities.forEach(en => { ctx.fillStyle = "#2ecc71"; ctx.fillRect(en.x, en.y, 24, 18); });
+    drops.forEach(d => { ctx.drawImage(tex[d.id], d.x, d.y, 16, 16); });
     ctx.fillStyle = "#e67e22"; ctx.fillRect(player.x, player.y, player.w, player.h);
+
     ctx.restore();
-    
     document.getElementById('hp-fill').style.width = player.hp + "%";
 }
 
 function updateUI() {
     const hb = document.getElementById('hotbar'); hb.innerHTML = '';
-    [1,2,3,4,8].forEach(id => {
+    [1,2,3,8].forEach(id => {
         const s = document.createElement('div');
         s.className = `slot ${player.selected === id ? 'selected' : ''}`;
         s.onclick = () => { player.selected = id; updateUI(); };
-        const icon = document.createElement('canvas'); icon.width=16; icon.height=16;
+        s.innerHTML = `<div class="count">${player.inv[id]||0}</div>`;
+        let icon = document.createElement('canvas'); icon.width=16; icon.height=16;
         icon.getContext('2d').drawImage(tex[id],0,0);
         s.appendChild(icon);
-        s.innerHTML += `<div class="count">${player.inv[id]||0}</div>`;
         hb.appendChild(s);
     });
 }
 
-window.onkeydown = (e) => { keys[e.code] = true; if(e.key >= 1 && e.key <= 5) { player.selected = [1,2,3,4,8][e.key-1]; updateUI(); } };
+/** INPUTS **/
+window.onkeydown = (e) => {
+    keys[e.code] = true;
+    if(e.key >= 1 && e.key <= 4) { player.selected = [1,2,3,8][e.key-1]; updateUI(); }
+};
 window.onkeyup = (e) => keys[e.code] = false;
-canvas.onmousedown = (e) => { if(e.button===0) mouse.down=true; if(e.button===2) mouse.rightDown=true; };
-window.onmouseup = () => { mouse.down=false; mouse.rightDown=false; };
+canvas.onmousedown = (e) => { if(e.button===0) mouse.down = true; if(e.button===2) mouse.right = true; };
+window.onmouseup = () => { mouse.down = false; mouse.right = false; };
 canvas.onmousemove = (e) => { mouse.x = e.clientX; mouse.y = e.clientY; };
 canvas.oncontextmenu = (e) => e.preventDefault();
 
 initTextures();
 initWorld();
+updateLighting();
 updateUI();
 update();
 </script>
