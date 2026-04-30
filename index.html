@@ -2,185 +2,180 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Terraria JS - Definitive Edition</title>
+    <title>Terraria JS - World Explorer Edition</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, sans-serif; user-select: none; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; image-rendering: pixelated; cursor: crosshair; }
+        
+        /* UI Principal */
         .ui { position: absolute; top: 20px; left: 20px; z-index: 100; pointer-events: none; }
-        #hp-bar { width: 220px; height: 18px; background: #1a1a1a; border: 2px solid #333; position: relative; }
-        #hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #d32f2f, #ff5252); box-shadow: 0 0 10px rgba(255,0,0,0.5); }
-        #hotbar { position: absolute; top: 50px; left: 20px; display: flex; gap: 4px; pointer-events: all; }
-        .slot { width: 44px; height: 44px; background: rgba(30,30,60,0.8); border: 2px solid #1a1a3a; display: flex; align-items: center; justify-content: center; position: relative; }
-        .slot.selected { border-color: #fbff00; background: rgba(60,60,120,0.9); }
+        #hp-bar { width: 200px; height: 18px; background: #1a1a1a; border: 2px solid #333; margin-bottom: 10px; }
+        #hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #d32f2f, #ff5252); }
+        
+        /* Mini-mapa Style */
+        #minimap-container { 
+            position: absolute; top: 20px; right: 20px; 
+            width: 180px; height: 120px; 
+            border: 4px solid #3d3d3d; background: rgba(0,0,0,0.8);
+            overflow: hidden; box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+        #minimapCanvas { width: 100%; height: 100%; image-rendering: pixelated; }
+
+        /* Hotbar */
+        #hotbar { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; pointer-events: all; padding: 10px; background: rgba(0,0,0,0.6); border: 2px solid #444; }
+        .slot { width: 44px; height: 44px; background: rgba(40,40,80,0.7); border: 2px solid #222; display: flex; align-items: center; justify-content: center; position: relative; }
+        .slot.selected { border-color: #fbff00; background: rgba(70,70,140,0.8); }
         .count { position: absolute; bottom: 1px; right: 3px; color: white; font-size: 11px; text-shadow: 1px 1px black; }
-        #seed-tag { position: absolute; bottom: 10px; right: 10px; color: rgba(255,255,255,0.3); font-size: 12px; }
     </style>
 </head>
 <body>
 
 <div class="ui">
     <div id="hp-bar"><div id="hp-fill"></div></div>
+    <div style="color: white; text-shadow: 1px 1px 2px #000;">Bioma: Floresta Profunda</div>
 </div>
+
+<div id="minimap-container">
+    <canvas id="minimapCanvas"></canvas>
+</div>
+
 <div id="hotbar"></div>
-<div id="seed-tag"></div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
-/** ENGINE CONFIG **/
+/** ENGINE CONFIG - MUNDO AUMENTADO **/
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+const mCanvas = document.getElementById('minimapCanvas');
+const mCtx = mCanvas.getContext('2d');
+
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-const TILE_SIZE = 32; // Menor para caber mais mundo na tela
-const WORLD_W = 500;
-const WORLD_H = 150;
-const SEEDS = [777, 101, 505, 999, 123, 444, 888, 202, 303, 666];
-const SEED = SEEDS[Math.floor(Math.random() * SEEDS.length)];
-document.getElementById('seed-tag').innerText = "World Seed: " + SEED;
+const TILE_SIZE = 32;
+const WORLD_W = 1200; // Mundo massivo (38.400 pixels de largura)
+const WORLD_H = 250;  // Profundidade aumentada para cavernas épicas
+const SEED = Math.random() * 99999;
 
 let world = [], walls = [], light = [];
-let drops = [], entities = [], particles = [];
+let drops = [], entities = [];
 const tex = {};
-const player = { x: 8000, y: 1200, w: 20, h: 34, vx: 0, vy: 0, hp: 100, selected: 1, inv: {1:50, 2:50, 3:0, 4:0, 8:0} };
+const player = { x: (WORLD_W * TILE_SIZE) / 2, y: 1000, w: 20, h: 34, vx: 0, vy: 0, hp: 100, selected: 1, inv: {1:99, 2:99, 3:99, 4:0, 8:0} };
 const camera = { x: 0, y: 0 };
 const keys = {};
 let mouse = { x: 0, y: 0, down: false, right: false };
 
-/** GENERATOR (Simulando Perlin Noise com camadas de oitavas) **/
-function noise(x, freq) {
-    return Math.sin(x * freq + SEED) * 0.5 + Math.sin(x * freq * 0.5 + SEED * 0.5) * 0.25;
-}
-
+/** GERAÇÃO DE TERRENO **/
 function initWorld() {
     for (let y = 0; y < WORLD_H; y++) {
         world[y] = new Int8Array(WORLD_W);
         walls[y] = new Int8Array(WORLD_W);
-        light[y] = new Float32Array(WORLD_W).fill(0);
+        light[y] = new Float32Array(WORLD_W);
     }
 
     for (let x = 0; x < WORLD_W; x++) {
-        // Superfície mais natural
-        let h = 45 + Math.floor(noise(x, 0.1) * 15 + noise(x, 0.02) * 25);
+        let surf = 60 + Math.floor(Math.sin(x * 0.05) * 10 + Math.sin(x * 0.01) * 20);
         for (let y = 0; y < WORLD_H; y++) {
-            if (y > h) {
-                // Algoritmo de Cavernas (Ruído de Densidade)
-                let density = Math.sin(x * 0.1) + Math.sin(y * 0.1) + (sRandom() * 2 - 1);
-                let isCave = density > 1.2; 
-
-                if (!isCave) {
-                    world[y][x] = (y < h + 15) ? 2 : 3; // Dirt ou Stone
-                    if (y === h) world[y][x] = 1; // Grass
-                    if (y > 80 && sRandom() < 0.01) world[y][x] = 8; // Ore
+            if (y >= surf) {
+                // Algoritmo de Densidade para Cavernas (Perlin-like)
+                let density = Math.sin(x * 0.12) + Math.sin(y * 0.15) + (Math.random() * 1.8);
+                if (density < 2.3) { 
+                    world[y][x] = (y < surf + 25) ? 2 : 3;
+                    if (y === surf) world[y][x] = 1;
+                    if (y > 100 && Math.random() < 0.015) world[y][x] = 8;
                 }
-                walls[y][x] = (y < h + 15) ? 2 : 3; // Parede de fundo
+                walls[y][x] = (y < surf + 25) ? 2 : 3;
             }
         }
-        // Árvores
-        if (x % 15 === 0 && sRandom() > 0.5) {
-            let th = 5 + Math.floor(sRandom() * 4);
-            for(let i=1; i<th; i++) if(h-i > 0) world[h-i][x] = 4; // Log
-            for(let ly=-2; ly<=0; ly++) for(let lx=-1; lx<=1; lx++) world[h-th+ly][x+lx] = 5; // Leaves
+        // Árvores esparsas
+        if (x % 18 === 0 && Math.random() > 0.4) {
+            let th = 6 + Math.floor(Math.random() * 5);
+            for(let i=1; i<th; i++) if(surf-i > 0) world[surf-i][x] = 4;
+            for(let ly=-2; ly<=0; ly++) for(let lx=-1; lx<=1; lx++) 
+                if(surf-th+ly > 0) world[surf-th+ly][x+lx] = 5;
         }
     }
+    mCanvas.width = WORLD_W;
+    mCanvas.height = WORLD_H;
 }
 
-/** LIGHTING SYSTEM (Flood Fill de Luz) **/
+/** ILUMINAÇÃO **/
 function updateLighting() {
-    // Reseta luz (sol alcança até a superfície)
     for (let x = 0; x < WORLD_W; x++) {
-        let skyLight = 1.0;
+        let sky = 1.0;
         for (let y = 0; y < WORLD_H; y++) {
-            if (world[y][x] !== 0 && world[y][x] !== 5) skyLight -= 0.2;
-            if (skyLight < 0) skyLight = 0;
-            light[y][x] = skyLight;
+            if (world[y][x] !== 0 && world[y][x] !== 5) sky -= 0.18;
+            if (sky < 0.1) sky = 0.1;
+            light[y][x] = sky;
         }
     }
-    // Difusão simples para suavizar
-    for (let i = 0; i < 2; i++) {
-        for (let y = 1; y < WORLD_H-1; y++) {
-            for (let x = 1; x < WORLD_W-1; x++) {
-                let avg = (light[y][x] + light[y-1][x] + light[y+1][x] + light[y][x-1] + light[y][x+1]) / 5;
-                light[y][x] = avg;
+}
+
+/** MINI-MAPA **/
+function drawMinimap() {
+    mCtx.clearRect(0, 0, mCanvas.width, mCanvas.height);
+    const colors = { 1: "#52ad56", 2: "#855428", 3: "#444", 4: "#634121", 5: "#2ecc71", 8: "#fff" };
+    
+    // Renderiza apenas uma versão simplificada no canvas oculto do mapa
+    for (let y = 0; y < WORLD_H; y += 2) { // Step 2 para performance
+        for (let x = 0; x < WORLD_W; x += 2) {
+            let id = world[y][x];
+            if (id !== 0) {
+                mCtx.fillStyle = colors[id];
+                mCtx.fillRect(x, y, 2, 2);
             }
         }
     }
+    // Player no mapa
+    mCtx.fillStyle = "red";
+    mCtx.fillRect(player.x / TILE_SIZE, player.y / TILE_SIZE, 6, 6);
 }
 
-function sRandom() {
-    let x = Math.sin(seedState++) * 10000;
-    return x - Math.floor(x);
-}
-let seedState = SEED;
-
-/** TEXTURAS **/
+/** TEXTURAS PIXEL ART **/
 function initTextures() {
-    const p = { 1: "#52ad56", 2: "#855428", 3: "#777", 4: "#634121", 5: "#2d9c3a", 8: "#d1d1d1" };
+    const p = { 1: "#48b04d", 2: "#8b5a2b", 3: "#7a7a7a", 4: "#6b4423", 5: "#2ecc71", 8: "#d1d1d1" };
     for (let id in p) {
         let t = document.createElement('canvas'); t.width = 16; t.height = 16;
         let c = t.getContext('2d');
         c.fillStyle = p[id]; c.fillRect(0,0,16,16);
-        c.fillStyle = "rgba(0,0,0,0.2)"; c.fillRect(0,8,16,8);
+        c.fillStyle = "rgba(0,0,0,0.15)"; c.fillRect(0,0,16,4);
         tex[id] = t;
     }
 }
 
-/** LÓGICA PRINCIPAL **/
+/** LOOP DE ATUALIZAÇÃO **/
 function update() {
-    // Física Player
-    player.vx = keys['KeyA'] ? -5 : keys['KeyD'] ? 5 : 0;
-    player.vy += 0.4;
+    // Física
+    player.vx = keys['KeyA'] ? -5.5 : keys['KeyD'] ? 5.5 : 0;
+    player.vy += 0.45;
     player.x += player.vx;
     if(checkColl(player.x, player.y)) player.x -= player.vx;
     player.y += player.vy;
     if(checkColl(player.x, player.y)) {
         player.y = Math.floor((player.y + player.h)/TILE_SIZE) * TILE_SIZE - player.h;
         player.vy = 0;
-        if(keys['Space'] || keys['KeyW']) player.vy = -10;
+        if(keys['Space'] || keys['KeyW']) player.vy = -10.5;
     }
 
-    // Interação
+    // Mineração e Construção
     let mx = mouse.x + camera.x, my = mouse.y + camera.y;
     let gx = Math.floor(mx/TILE_SIZE), gy = Math.floor(my/TILE_SIZE);
+    let dist = Math.hypot(mx - (player.x+10), my - (player.y+17));
 
-    if (mouse.down && world[gy] && world[gy][gx] !== 0) {
-        if(Math.hypot(mx - (player.x+10), my - (player.y+17)) < 200) {
-            let id = world[gy][gx];
-            if(id !== 0) {
-                spawnDrop(mx, my, id);
-                world[gy][gx] = 0;
-                updateLighting();
-            }
-        }
+    if (mouse.down && world[gy] && world[gy][gx] !== 0 && dist < 220) {
+        world[gy][gx] = 0;
+        updateLighting();
+        if(Math.random() < 0.1) drawMinimap(); // Atualiza mapa ocasionalmente ao minerar
     }
-    
-    if (mouse.right && world[gy] && world[gy][gx] === 0) {
-        if(player.inv[player.selected] > 0 && Math.hypot(mx - (player.x+10), my - (player.y+17)) < 200) {
-            world[gy][gx] = player.selected;
-            player.inv[player.selected]--;
-            updateLighting();
-            updateUI();
-        }
+    if (mouse.right && world[gy] && world[gy][gx] === 0 && dist < 220 && player.inv[player.selected] > 0) {
+        world[gy][gx] = player.selected;
+        player.inv[player.selected]--;
+        updateLighting();
+        updateUI();
+        drawMinimap();
     }
 
-    // Slimes
-    if(Math.random() < 0.01 && entities.length < 5) {
-        entities.push({x: player.x + (Math.random()-0.5)*1000, y: player.y-200, hp: 50, vx: 0, vy: 0});
-    }
-    entities.forEach((en, i) => {
-        en.vy += 0.4; en.y += en.vy; en.x += en.vx;
-        if(checkColl(en.x, en.y)) { en.y -= en.vy; en.vy = -8; en.vx = (player.x > en.x ? 2 : -2); }
-        if(Math.hypot(player.x-en.x, player.y-en.y) < 30) player.hp -= 0.2;
-        if(en.hp <= 0) entities.splice(i, 1);
-    });
-
-    // Drops
-    drops.forEach((d, i) => {
-        d.y += 2;
-        if(checkColl(d.x, d.y)) d.y -= 2;
-        if(Math.hypot(player.x-d.x, player.y-d.y) < 40) { player.inv[d.id]++; drops.splice(i,1); updateUI(); }
-    });
-
+    // Câmera Suave
     camera.x += (player.x - canvas.width/2 - camera.x) * 0.1;
     camera.y += (player.y - canvas.height/2 - camera.y) * 0.1;
 
@@ -190,14 +185,14 @@ function update() {
 
 function checkColl(x, y) {
     let gx = Math.floor((x+4)/TILE_SIZE), gy = Math.floor((y+player.h)/TILE_SIZE);
-    return world[gy] && world[gy][gx] !== 0 && world[gy][gx] !== 5;
+    let gx2 = Math.floor((x+player.w-4)/TILE_SIZE);
+    return world[gy] && (world[gy][gx] !== 0 && world[gy][gx] !== 5 || world[gy][gx2] !== 0 && world[gy][gx2] !== 5);
 }
 
-function spawnDrop(x, y, id) { drops.push({x, y, id}); }
-
 function draw() {
-    ctx.fillStyle = "#4a90e2";
-    ctx.fillRect(0,0,canvas.width, canvas.height);
+    // Céu Dinâmico
+    ctx.fillStyle = "#5d94fb";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
@@ -207,27 +202,28 @@ function draw() {
 
     for(let y=Math.max(0, y0); y<Math.min(WORLD_H, y1); y++) {
         for(let x=Math.max(0, x0); x<Math.min(WORLD_W, x1); x++) {
-            // Desenha Parede de Fundo
+            // Walls
             if (walls[y][x] !== 0) {
-                ctx.fillStyle = walls[y][x] === 2 ? "#3a2a1a" : "#2a2a2a";
+                ctx.fillStyle = walls[y][x] === 2 ? "#3d2b1f" : "#252525";
                 ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
             }
-            // Desenha Bloco
+            // Blocks
             let id = world[y][x];
-            if(id !== 0) {
-                ctx.drawImage(tex[id], x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            }
-            // Luz
+            if(id !== 0) ctx.drawImage(tex[id], x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            
+            // Iluminação
             ctx.fillStyle = `rgba(0,0,0,${1 - light[y][x]})`;
             ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
     }
 
-    entities.forEach(en => { ctx.fillStyle = "#2ecc71"; ctx.fillRect(en.x, en.y, 24, 18); });
-    drops.forEach(d => { ctx.drawImage(tex[d.id], d.x, d.y, 16, 16); });
-    ctx.fillStyle = "#e67e22"; ctx.fillRect(player.x, player.y, player.w, player.h);
+    // Player
+    ctx.fillStyle = "#e67e22";
+    ctx.fillRect(player.x, player.y, player.w, player.h);
 
     ctx.restore();
+    
+    // UI
     document.getElementById('hp-fill').style.width = player.hp + "%";
 }
 
@@ -246,10 +242,7 @@ function updateUI() {
 }
 
 /** INPUTS **/
-window.onkeydown = (e) => {
-    keys[e.code] = true;
-    if(e.key >= 1 && e.key <= 4) { player.selected = [1,2,3,8][e.key-1]; updateUI(); }
-};
+window.onkeydown = (e) => { keys[e.code] = true; if(e.key >= 1 && e.key <= 4) { player.selected = [1,2,3,8][e.key-1]; updateUI(); } };
 window.onkeyup = (e) => keys[e.code] = false;
 canvas.onmousedown = (e) => { if(e.button===0) mouse.down = true; if(e.button===2) mouse.right = true; };
 window.onmouseup = () => { mouse.down = false; mouse.right = false; };
@@ -260,6 +253,7 @@ initTextures();
 initWorld();
 updateLighting();
 updateUI();
+drawMinimap();
 update();
 </script>
 </body>
