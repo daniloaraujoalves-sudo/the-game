@@ -2,45 +2,36 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria - Pixel Art Style</title>
+    <title>Terraria JS - Full Survival</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; user-select: none; }
-        canvas { display: block; cursor: crosshair; image-rendering: pixelated; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+        canvas { display: block; image-rendering: pixelated; cursor: crosshair; }
         
-        /* UI Estilo Retro */
-        .ui-container { position: absolute; top: 15px; left: 15px; z-index: 100; }
-        #hp-bar { 
-            width: 210px; height: 22px; background: #1a1a1a; 
-            border: 3px solid #3d3d3d; border-radius: 0px; position: relative;
-        }
-        #hp-fill { 
-            width: 100%; height: 100%; background: linear-gradient(to bottom, #ff2e2e, #8b0000); 
-            box-shadow: inset 0 2px 4px rgba(255,255,255,0.4);
-        }
+        .ui-overlay { position: absolute; top: 20px; left: 20px; z-index: 100; pointer-events: none; }
+        #hp-bar { width: 200px; height: 20px; background: #222; border: 2px solid #555; position: relative; }
+        #hp-fill { width: 100%; height: 100%; background: #e74c3c; transition: width 0.3s; }
         
-        #inventory-ui { 
-            position: absolute; top: 50px; left: 15px; display: flex; gap: 4px; 
-            background: rgba(40, 40, 80, 0.4); padding: 5px; border: 2px solid #222;
+        #hotbar { 
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); 
+            display: flex; gap: 5px; background: rgba(0,0,0,0.6); padding: 8px; border: 2px solid #444;
         }
         .slot { 
-            width: 42px; height: 42px; background: rgba(50, 50, 100, 0.7); 
-            border: 2px solid #1a1a3a; display: flex; align-items: center; justify-content: center; 
+            width: 45px; height: 45px; background: #333; border: 2px solid #666; 
+            display: flex; align-items: center; justify-content: center; position: relative; pointer-events: all; cursor: pointer;
         }
-        .slot.selected { border-color: #fbff00; background: rgba(100, 100, 200, 0.8); }
+        .slot.selected { border-color: #fff; background: #555; box-shadow: 0 0 10px rgba(255,255,255,0.2); }
         .slot canvas { width: 30px; height: 30px; }
-        .count { position: absolute; bottom: 1px; right: 2px; color: #fff; font-size: 12px; text-shadow: 1px 1px #000; }
-
-        #location-label { color: #fff; text-shadow: 2px 2px #000; font-size: 18px; margin-top: 10px; }
+        .count { position: absolute; bottom: 1px; right: 3px; color: white; font-size: 11px; text-shadow: 1px 1px black; }
     </style>
 </head>
 <body>
 
-<div class="ui-container">
+<div class="ui-overlay">
     <div id="hp-bar"><div id="hp-fill"></div></div>
-    <div id="location-label">Superfície</div>
+    <div id="biomes-info" style="color: white; margin-top: 10px; text-shadow: 2px 2px 4px #000;">Floresta</div>
 </div>
 
-<div id="inventory-ui"></div>
+<div id="hotbar"></div>
 <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -49,122 +40,150 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-/** CONFIGURAÇÕES **/
+/** CONFIGS **/
 const TILE_SIZE = 40;
-const WORLD_COLS = 1000;
-const WORLD_ROWS = 120;
-const GRAVITY = 0.45;
+const WORLD_COLS = 500;
+const WORLD_ROWS = 100;
+const REACH = TILE_SIZE * 5.5;
 const DAY_LENGTH = 30000;
 
-let world = [], lightMap = [], treeWorld = [];
+const DURABILITY = { 1: 15, 2: 15, 3: 45, 4: 25, 5: 10, 6: 15, 8: 60 }; // Delay de mineração
+
+let world = [], worldDmg = [], treeWorld = [], lightMap = [];
+let drops = [], particles = [];
 let gameTime = 10000;
 const tex = {};
-const player = { x: 20000, y: 1200, w: 22, h: 38, vx: 0, vy: 0, hp: 100, selected: 1, inv: {1:99, 2:99, 3:99, 4:99, 6:99, 8:10} };
-const camera = { x: 0, y: 0 };
-const keys = {};
-let mouse = { x: 0, y: 0, down: false };
 
-/** TEXTURAS COM ESTILO PIXELADO **/
+const player = { 
+    x: 4000, y: 1000, w: 20, h: 36, vx: 0, vy: 0, hp: 100, 
+    selected: 1, inv: {1:10, 2:10, 3:0, 4:0, 6:0, 8:0} 
+};
+
+const keys = {};
+const camera = { x: 0, y: 0 };
+let mouse = { x: 0, y: 0, down: false, rightDown: false };
+
+/** TEXTURAS **/
 function initTextures() {
     const palette = {
         1: ["#48b04d", "#2d6b30", "grass"], 2: ["#8b5a2b", "#5d3a1a", "dirt"],
         3: ["#7a7a7a", "#4a4a4a", "stone"], 4: ["#6b4423", "#3d2714", "wood"],
         5: ["#2d9c3a", "#1a5e22", "leaves"], 6: ["#e3c16f", "#bca158", "sand"],
-        7: ["#4a90e2", "#357abd", "water"], 8: ["#d3d3d3", "#808080", "iron"]
+        8: ["#d3d3d3", "#808080", "iron"]
     };
     for (let id in palette) {
-        const t = document.createElement('canvas');
-        t.width = 16; t.height = 16;
+        const t = document.createElement('canvas'); t.width = 16; t.height = 16;
         const tc = t.getContext('2d');
-        tc.fillStyle = palette[id][0];
-        tc.fillRect(0,0,16,16);
+        tc.fillStyle = palette[id][0]; tc.fillRect(0,0,16,16);
         tc.fillStyle = palette[id][1];
         if(palette[id][2] === "grass") tc.fillRect(0, 0, 16, 5);
-        if(palette[id][2] === "dirt" || palette[id][2] === "stone") {
-            for(let i=0; i<4; i++) tc.fillRect(Math.random()*12, Math.random()*12, 3, 3);
-        }
+        if(palette[id][2] === "dirt") { tc.globalAlpha = 0.3; tc.fillRect(2,2,4,4); tc.fillRect(8,9,3,3); }
         tex[id] = t;
     }
 }
 
-/** GERAÇÃO DE MUNDO E LUZ **/
+/** GERAR MUNDO **/
 function initWorld() {
     for (let y = 0; y < WORLD_ROWS; y++) {
         world[y] = new Int8Array(WORLD_COLS);
+        worldDmg[y] = new Int16Array(WORLD_COLS);
         treeWorld[y] = new Int8Array(WORLD_COLS);
         lightMap[y] = new Float32Array(WORLD_COLS);
     }
-
     for (let x = 0; x < WORLD_COLS; x++) {
-        let surfaceY = 50 + Math.floor(Math.sin(x * 0.08) * 6 + Math.sin(x * 0.02) * 15);
+        let surf = 45 + Math.floor(Math.sin(x*0.1)*5 + Math.sin(x*0.02)*12);
         for (let y = 0; y < WORLD_ROWS; y++) {
-            if (y > surfaceY) {
-                let type = 2;
-                if (y > surfaceY + 10) type = 3;
-                if (y > surfaceY + 40 && Math.random() < 0.02) type = 8;
+            if (y > surf) {
+                let type = (y > surf + 15) ? 3 : 2;
+                if(y > 70 && Math.random() < 0.02) type = 8;
                 world[y][x] = type;
-            } else if (y === surfaceY) {
-                world[y][x] = 1;
-                if(x % 12 === 0 && Math.random() > 0.4) spawnTree(x, y);
+                worldDmg[y][x] = DURABILITY[type];
+            } else if (y === surf) {
+                world[y][x] = 1; worldDmg[y][x] = DURABILITY[1];
+                if(x % 10 === 0 && Math.random() > 0.3) spawnTree(x, y);
             }
         }
     }
+    updateLight();
 }
 
 function spawnTree(x, y) {
-    let h = 6 + Math.floor(Math.random() * 5);
+    let h = 5 + Math.floor(Math.random()*4);
     for(let i=1; i<=h; i++) if(y-i > 0) treeWorld[y-i][x] = 4;
-    for(let ly=-3; ly<=0; ly++) {
-        for(let lx=-2; lx<=2; lx++) {
-            if(Math.abs(lx) + Math.abs(ly+1) < 4) treeWorld[y-h+ly][x+lx] = 5;
-        }
-    }
+    for(let ly=-3; ly<=0; ly++) for(let lx=-2; lx<=2; lx++)
+        if(Math.abs(lx)+Math.abs(ly+1) < 4) treeWorld[y-h+ly][x+lx] = 5;
 }
 
-/** ILUMINAÇÃO (O SEGREDO DO ESTILO TERRARIA) **/
-function calculateLight() {
+function updateLight() {
     for (let x = 0; x < WORLD_COLS; x++) {
-        let light = 1.0;
+        let l = 1.0;
         for (let y = 0; y < WORLD_ROWS; y++) {
-            if (world[y][x] !== 0) light -= 0.15; // Blocos bloqueiam a luz
-            if (light < 0.1) light = 0.1;
-            lightMap[y][x] = light;
+            if (world[y][x] !== 0) l -= 0.18;
+            if (l < 0.15) l = 0.15;
+            lightMap[y][x] = l;
         }
     }
 }
 
+/** LOGICA **/
 function isSolid(x, y) {
-    const gx = Math.floor(x / TILE_SIZE), gy = Math.floor(y / TILE_SIZE);
-    return world[gy] && world[gy][gx] !== 0 && world[gy][gx] !== 7;
+    const gx = Math.floor(x/TILE_SIZE), gy = Math.floor(y/TILE_SIZE);
+    return world[gy] && world[gy][gx] !== 0;
 }
 
-/** LOOP PRINCIPAL **/
+function spawnDrop(x, y, id) {
+    if(id === 0) return;
+    drops.push({ x, y, id, vx: (Math.random()-0.5)*4, vy: -3 });
+}
+
 function update() {
     gameTime = (gameTime + 1) % DAY_LENGTH;
     
-    // Movimento do Player
+    // Player Physics
     player.vx = keys['KeyA'] ? -5 : keys['KeyD'] ? 5 : 0;
-    player.vy += GRAVITY;
-    
+    player.vy += 0.5;
     player.x += player.vx;
     if(isSolid(player.x, player.y+5) || isSolid(player.x+player.w, player.y+5)) player.x -= player.vx;
-    
     player.y += player.vy;
     if(isSolid(player.x+2, player.y+player.h) || isSolid(player.x+player.w-2, player.y+player.h)) {
-        player.y = Math.floor((player.y+player.h)/TILE_SIZE)*TILE_SIZE - player.h;
+        player.y = Math.floor((player.y+player.h)/40)*40 - player.h;
         player.vy = 0;
-        if(keys['Space'] || keys['KeyW']) player.vy = -11;
+        if(keys['Space'] || keys['KeyW']) player.vy = -10.5;
     }
 
-    // Mineração/Construção
-    if(mouse.down) {
-        const gx = Math.floor((mouse.x + camera.x)/TILE_SIZE);
-        const gy = Math.floor((mouse.y + camera.y)/TILE_SIZE);
-        if(world[gy] && world[gy][gx] !== 0) {
-            world[gy][gx] = 0;
-            calculateLight();
+    // Interação (Mineração com Delay e Construção)
+    const gx = Math.floor((mouse.x + camera.x)/TILE_SIZE);
+    const gy = Math.floor((mouse.y + camera.y)/TILE_SIZE);
+    const dist = Math.hypot((mouse.x+camera.x)-(player.x+10), (mouse.y+camera.y)-(player.y+18));
+
+    if(dist < REACH && world[gy]) {
+        if(mouse.down && world[gy][gx] !== 0) { // Mineração
+            worldDmg[gy][gx]--;
+            if(worldDmg[gy][gx] <= 0) {
+                spawnDrop(gx*40, gy*40, world[gy][gx]);
+                world[gy][gx] = 0;
+                updateLight();
+                updateUI();
+            }
+        }
+        if(mouse.rightDown && world[gy][gx] === 0 && player.inv[player.selected] > 0) { // Construção
+            world[gy][gx] = player.selected;
+            worldDmg[gy][gx] = DURABILITY[player.selected];
+            player.inv[player.selected]--;
+            updateLight();
+            updateUI();
         }
     }
+
+    // Drops Physics & Collection
+    drops.forEach((d, i) => {
+        d.vy += 0.2; d.x += d.vx; d.y += d.vy;
+        if(isSolid(d.x, d.y+10)) { d.vy = 0; d.vx *= 0.8; d.y = Math.floor((d.y+10)/40)*40-10; }
+        // Atração magnética
+        let distP = Math.hypot(player.x-d.x, player.y-d.y);
+        if(distP < 80) { d.vx += (player.x-d.x)*0.05; d.vy += (player.y-d.y)*0.05; }
+        if(distP < 20) { player.inv[d.id] = (player.inv[d.id]||0)+1; drops.splice(i,1); updateUI(); }
+    });
 
     camera.x += (player.x - canvas.width/2 - camera.x) * 0.1;
     camera.y += (player.y - canvas.height/2 - camera.y) * 0.1;
@@ -174,82 +193,68 @@ function update() {
 }
 
 function draw() {
-    // 1. Céu com Gradiente Dinâmico
-    const dayRatio = Math.sin((gameTime/DAY_LENGTH)*Math.PI);
-    const skyColor = `rgb(${20*dayRatio}, ${120*dayRatio + 20}, ${230*dayRatio + 40})`;
-    ctx.fillStyle = skyColor;
+    // Fundo
+    const d = Math.sin((gameTime/DAY_LENGTH)*Math.PI);
+    ctx.fillStyle = `rgb(0, ${80*d + 20}, ${180*d + 40})`;
     ctx.fillRect(0,0,canvas.width, canvas.height);
-
-    // 2. Paralaxe (Montanhas de fundo)
-    ctx.fillStyle = `rgba(30, 60, 40, ${dayRatio})`;
-    for(let i=0; i<10; i++) {
-        let px = (i*400 - camera.x * 0.3) % 4000;
-        ctx.beginPath();
-        ctx.moveTo(px, canvas.height);
-        ctx.lineTo(px + 200, canvas.height - 300);
-        ctx.lineTo(px + 400, canvas.height);
-        ctx.fill();
-    }
 
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
-    // 3. Desenho do Mundo
-    const sc = Math.floor(camera.x/TILE_SIZE)-1, ec = sc + Math.ceil(canvas.width/TILE_SIZE)+2;
-    const sy = Math.floor(camera.y/TILE_SIZE)-1, ey = sy + Math.ceil(canvas.height/TILE_SIZE)+2;
+    const sc = Math.floor(camera.x/40)-1, ec = sc + Math.ceil(canvas.width/40)+2;
+    const sy = Math.floor(camera.y/40)-1, ey = sy + Math.ceil(canvas.height/40)+2;
 
     for(let y=Math.max(0, sy); y<Math.min(WORLD_ROWS, ey); y++) {
         for(let x=sc; x<ec; x++) {
             if(x<0 || x>=WORLD_COLS) continue;
-            
-            // Desenha blocos ou árvores
-            let tid = world[y][x] || treeWorld[y][x];
-            if(tid) {
-                ctx.drawImage(tex[tid], x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
-                // Aplica a luz (Terraria style)
-                ctx.fillStyle = `rgba(0,0,10,${1 - lightMap[y][x]})`;
-                ctx.fillRect(x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            let id = world[y][x] || treeWorld[y][x];
+            if(id) {
+                ctx.drawImage(tex[id], x*40, y*40, 40, 40);
+                ctx.fillStyle = `rgba(0,0,15,${1 - lightMap[y][x]})`;
+                ctx.fillRect(x*40, y*40, 40, 40);
             }
         }
     }
 
-    // 4. Player (Sprite Simples)
-    ctx.fillStyle = "#ffccaa"; // Pele
-    ctx.fillRect(player.x, player.y, player.w, player.h/2);
-    ctx.fillStyle = "#3366ff"; // Calça
-    ctx.fillRect(player.x, player.y + player.h/2, player.w, player.h/2);
+    // Drops
+    drops.forEach(d => ctx.drawImage(tex[d.id], d.x+10, d.y+10, 20, 20));
+
+    // Player
+    ctx.fillStyle = "#e67e22";
+    ctx.fillRect(player.x, player.y, player.w, player.h);
 
     ctx.restore();
-
-    // 5. Interface
     document.getElementById('hp-fill').style.width = player.hp + "%";
-    document.getElementById('location-label').innerText = player.y > 2800 ? "Camada de Pedra" : "Superfície";
 }
 
 function updateUI() {
-    const ui = document.getElementById('inventory-ui');
-    ui.innerHTML = '';
+    const hotbar = document.getElementById('hotbar');
+    hotbar.innerHTML = '';
     [1, 2, 3, 4, 6, 8].forEach(id => {
-        const div = document.createElement('div');
-        div.className = `slot ${player.selected === id ? 'selected' : ''}`;
-        div.innerHTML = `<canvas id="c${id}"></canvas><div class="count">${player.inv[id]||0}</div>`;
-        ui.appendChild(div);
-        const iconCtx = div.querySelector('canvas').getContext('2d');
-        setTimeout(() => iconCtx.drawImage(tex[id], 0, 0, 300, 150), 10);
+        const slot = document.createElement('div');
+        slot.className = `slot ${player.selected === id ? 'selected' : ''}`;
+        slot.onclick = () => { player.selected = id; updateUI(); };
+        const icon = document.createElement('canvas'); icon.width=16; icon.height=16;
+        icon.getContext('2d').drawImage(tex[id],0,0);
+        slot.appendChild(icon);
+        slot.innerHTML += `<div class="count">${player.inv[id]||0}</div>`;
+        hotbar.appendChild(slot);
     });
 }
 
 /** INPUTS **/
-window.onkeydown = (e) => keys[e.code] = true;
+window.onkeydown = (e) => {
+    keys[e.code] = true;
+    if(e.key >= 1 && e.key <= 8) { player.selected = parseInt(e.key); updateUI(); }
+};
 window.onkeyup = (e) => keys[e.code] = false;
-canvas.onmousedown = () => mouse.down = true;
-window.onmouseup = () => mouse.down = false;
+canvas.onmousedown = (e) => { if(e.button===0) mouse.down=true; if(e.button===2) mouse.rightDown=true; };
+window.onmouseup = () => { mouse.down=false; mouse.rightDown=false; };
 canvas.onmousemove = (e) => { mouse.x = e.clientX; mouse.y = e.clientY; };
+canvas.oncontextmenu = (e) => e.preventDefault();
 
-/** INICIAR **/
 initTextures();
 initWorld();
-calculateLight();
 updateUI();
 update();
 </script>
