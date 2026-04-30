@@ -2,82 +2,163 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria - Survival Edition</title>
+    <title>Mini Terraria - Biomas Colossais</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; user-select: none; }
-        canvas { display: block; cursor: crosshair; }
-        .ui-container { position: absolute; top: 10px; left: 10px; z-index: 100; display: flex; flex-direction: column; gap: 8px; }
-        .info { color: white; text-shadow: 1px 1px 2px black; background: rgba(0,0,0,0.6); padding: 8px 12px; border-radius: 5px; font-size: 13px; border: 1px solid #444; }
-        #hp-bar { width: 200px; height: 18px; background: #333; border: 2px solid #fff; border-radius: 3px; overflow: hidden; }
-        #hp-fill { width: 100%; height: 100%; background: #ff4757; transition: width 0.2s; }
-        #inventory-ui { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; background: rgba(0, 0, 0, 0.85); padding: 10px; border-radius: 10px; border: 2px solid #444; }
-        .slot { width: 45px; height: 45px; background: #222; border: 2px solid #555; border-radius: 4px; display: flex; align-items: center; justify-content: center; position: relative; }
-        .slot.selected { border-color: #fff; background: #333; box-shadow: 0 0 10px rgba(255,255,255,0.2); }
-        .slot canvas { width: 28px; height: 28px; image-rendering: pixelated; }
-        .count { position: absolute; bottom: 1px; right: 3px; color: white; font-size: 11px; font-weight: bold; }
-        #minimap-container { position: absolute; top: 10px; right: 10px; width: 180px; height: 130px; border: 2px solid #666; background: #000; border-radius: 5px; overflow: hidden; }
-        #minimap { width: 100%; height: 100%; image-rendering: pixelated; }
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: #000; 
+            font-family: 'Segoe UI', sans-serif; 
+        }
+
+        canvas { 
+            display: block; 
+            cursor: crosshair; 
+        }
+
+        .info { 
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            color: white; 
+            text-shadow: 1px 1px 2px black; 
+            background: rgba(0,0,0,0.5); 
+            padding: 12px; 
+            border-radius: 8px;
+            pointer-events: none; 
+            z-index: 10;
+        }
+
+        #inventory-ui {
+            position: absolute; 
+            bottom: 20px; 
+            left: 50%;
+            transform: translateX(-50%); 
+            display: flex; 
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.7); 
+            padding: 10px;
+            border-radius: 12px; 
+            border: 2px solid #444; 
+            z-index: 100;
+        }
+
+        .slot {
+            width: 45px; 
+            height: 45px; 
+            background: #333;
+            border: 2px solid #666; 
+            border-radius: 4px;
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            position: relative;
+        }
+
+        .slot.selected { 
+            border-color: #fff; 
+            box-shadow: 0 0 10px #fff; 
+            background: #555; 
+        }
+
+        .slot canvas { width: 30px; height: 30px; image-rendering: pixelated; }
+        .count { position: absolute; bottom: 2px; right: 4px; color: white; font-size: 10px; font-weight: bold; }
+
+        #minimap-container {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 200px;
+            height: 150px;
+            border: 2px solid #888;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 5px;
+            overflow: hidden;
+            z-index: 100;
+            box-shadow: 0 0 10px rgba(0,0,0,0.8);
+        }
+        #minimap {
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
     </style>
 </head>
 <body>
 
-<div class="ui-container">
-    <div id="hp-bar"><div id="hp-fill"></div></div>
-    <div class="info" id="location-info">Superfície | Floresta</div>
-    <div class="info" id="debug-info">X: 0 Y: 0</div>
+<div class="info" id="debug-info">Gerando Biomas Colossais...</div>
+
+<div id="minimap-container">
+    <canvas id="minimap"></canvas>
 </div>
 
-<div id="minimap-container"><canvas id="minimap"></canvas></div>
-<div id="inventory-ui"></div>
+<div id="inventory-ui">
+    <div class="slot selected" id="slot-1"><div class="count">0</div></div>
+    <div class="slot" id="slot-2"><div class="count">0</div></div>
+    <div class="slot" id="slot-3"><div class="count">0</div></div>
+    <div class="slot" id="slot-4"><div class="count">0</div></div>
+    <div class="slot" id="slot-6"><div class="count">0</div></div>
+</div>
 
 <canvas id="gameCanvas"></canvas>
 
 <script>
-/** ENGINE CORE **/
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-const TILE_SIZE = 40;
-const WORLD_WIDTH_PX = 600000;
-const WORLD_COLS = Math.floor(WORLD_WIDTH_PX / TILE_SIZE);
-const WORLD_ROWS = 100;
-const DAY_LENGTH = 20000;
+const minimapCanvas = document.getElementById('minimap');
+const minimapCtx = minimapCanvas.getContext('2d');
+const MINIMAP_WIDTH = 200;
+const MINIMAP_HEIGHT = 150;
+const MINIMAP_SCALE = 4; 
 
-let world = [], worldDamage = [], treeWorld = [];
-let particles = [], entities = [], drops = [];
-let gameTime = 5000;
+minimapCanvas.width = MINIMAP_WIDTH;
+minimapCanvas.height = MINIMAP_HEIGHT;
+
+const TILE_SIZE = 40;
+const WORLD_WIDTH_PX = 600000; // Seu mundo colossal original
+const WORLD_COLS = Math.floor(WORLD_WIDTH_PX / TILE_SIZE);
+const WORLD_ROWS = 90;
+const REACH_DISTANCE = TILE_SIZE * 5;
+
+// IDs: 1:Grama, 2:Terra, 3:Pedra, 4:Madeira, 5:Folha, 6:Areia, 7:Água, 8:Ferro, 9:Carvão
+const DURABILITY = { 1: 15, 2: 15, 3: 40, 4: 25, 5: 10, 6: 12, 7: 999, 8: 60, 9: 45 };
+
+let gameTime = 2000;
+const DAY_LENGTH = 15000;
 const tex = {};
 
-/** ASSETS **/
 function initTextures() {
-    const palette = {
+    const colors = {
         1: ["#4caf50", "#2e7d32", "grass"], 2: ["#795548", "#5d4037", "block"],
         3: ["#9e9e9e", "#616161", "block"], 4: ["#5d4037", "#3e2723", "block"],
         5: ["#2e7d32", "#1b5e20", "leaves"], 6: ["#f4d03f", "#d4ac0d", "block"],
         7: ["#3498db", "#2980b9", "water"], 8: ["#dcdde1", "#718093", "block"],
         9: ["#2f3640", "#000000", "block"]
     };
-    for (let id in palette) {
+    for (let id in colors) {
         const tCanvas = document.createElement('canvas');
         tCanvas.width = 16; tCanvas.height = 16;
         const tCtx = tCanvas.getContext('2d');
-        tCtx.fillStyle = palette[id][0];
+        tCtx.fillStyle = colors[id][0];
         tCtx.fillRect(0, 0, 16, 16);
-        tCtx.fillStyle = palette[id][1];
-        if(palette[id][2] === "grass") tCtx.fillRect(0, 0, 16, 5);
-        if(palette[id][2] === "block") { tCtx.globalAlpha = 0.3; tCtx.fillRect(0, 12, 16, 4); tCtx.fillRect(12, 0, 4, 16); }
+        tCtx.fillStyle = colors[id][1];
+        if(colors[id][2] === "grass") tCtx.fillRect(0, 0, 16, 5);
+        if(colors[id][2] === "block") { tCtx.globalAlpha = 0.3; tCtx.fillRect(0, 13, 16, 3); tCtx.fillRect(13, 0, 3, 16); }
+        if(colors[id][2] === "water") { tCtx.globalAlpha = 0.5; tCtx.fillRect(0, 0, 16, 8); }
         tex[id] = tCanvas;
     }
 }
 
-/** WORLD GEN **/
+let world = [], worldDamage = [], treeWorld = [];
+
 function getBiome(x) {
+    if (x < 1500 || x > WORLD_COLS - 1500) return "OCEANO";
     const v = Math.sin(x * 0.01);
-    if (x < 1000 || x > WORLD_COLS - 1000) return "OCEANO";
-    if (v > 0.7) return "AMAZONIA";
-    if (v < -0.7) return "DESERTO";
+    if (v > 0.65) return "AMAZONIA";
+    if (v < -0.65) return "DESERTO";
     return "FLORESTA";
 }
 
@@ -87,177 +168,210 @@ function initWorld() {
         worldDamage[y] = new Int16Array(WORLD_COLS);
         treeWorld[y] = new Int8Array(WORLD_COLS);
     }
+
     for (let x = 0; x < WORLD_COLS; x++) {
         const biome = getBiome(x);
-        let surf = 45 + Math.floor(Math.sin(x * 0.05) * 5);
-        if(biome === "OCEANO") surf = 65;
+        let surfaceY;
+        if (biome === "OCEANO") surfaceY = 58 + Math.floor(Math.sin(x * 0.04) * 4);
+        else if (biome === "DESERTO") surfaceY = 42 + Math.floor(Math.sin(x * 0.06) * 3);
+        else if (biome === "AMAZONIA") surfaceY = 28 + Math.floor(Math.sin(x * 0.09) * 11);
+        else surfaceY = 35 + Math.floor(Math.sin(x * 0.08) * 6);
+
+        surfaceY = Math.max(15, Math.min(WORLD_ROWS - 30, surfaceY));
+
         for (let y = 0; y < WORLD_ROWS; y++) {
-            if (y < surf) continue;
-            let type = 3;
-            if (y === surf) type = (biome === "OCEANO") ? 7 : (biome === "DESERTO" ? 6 : 1);
-            else if (y < surf + 8) type = (biome === "DESERTO") ? 6 : 2;
-            else if (Math.random() < 0.01) type = (y > 70) ? 9 : 8;
+            if (y < surfaceY) {
+                world[y][x] = 0;
+                continue;
+            }
+            let type = 3; 
+            if (y === surfaceY) {
+                type = (biome === "OCEANO") ? 7 : (biome === "DESERTO" ? 6 : 1);
+            } else if (y < surfaceY + 8) {
+                type = (biome === "DESERTO") ? 6 : 2;
+            } else if (y < surfaceY + 25) {
+                type = 2;
+            } else if (y > surfaceY + 40 && Math.random() < 0.02) {
+                type = 8;
+            } else if (y > surfaceY + 50 && Math.random() < 0.03) {
+                type = 9;
+            }
             world[y][x] = type;
-            worldDamage[y][x] = 20;
+            worldDamage[y][x] = DURABILITY[type] || 0;
         }
-        if (x % 15 === 0 && biome !== "OCEANO" && Math.random() < 0.6) spawnTree(x, surf);
+    }
+    generateTrees();
+}
+
+function generateTrees() {
+    for (let x = 10; x < WORLD_COLS - 10; x += Math.floor(Math.random() * 12) + 8) {
+        if (Math.random() > 0.4 && (getBiome(x) === "FLORESTA" || getBiome(x) === "AMAZONIA")) {
+            let groundY = -1;
+            for (let y = 0; y < WORLD_ROWS; y++) {
+                if (world[y][x] === 1) { groundY = y; break; }
+            }
+            if (groundY > 15) {
+                let h = (getBiome(x) === "AMAZONIA" ? 10 : 4) + Math.floor(Math.random() * 4);
+                for (let i = 1; i <= h; i++) {
+                    if (groundY - i >= 0) treeWorld[groundY - i][x] = 4;
+                }
+                let leafY = groundY - h;
+                for (let ly = -3; ly <= 0; ly++) {
+                    for (let lx = -2; lx <= 2; lx++) {
+                        if (Math.abs(lx) + Math.abs(ly + 1) < 4) {
+                            if (treeWorld[leafY + ly] && (leafY + ly) >= 0) treeWorld[leafY + ly][x + lx] = 5;
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
-function spawnTree(x, y) {
-    const h = 5 + Math.floor(Math.random() * 5);
-    for(let i=1; i<=h; i++) if(y-i > 0) treeWorld[y-i][x] = 4;
-    for(let ly=-2; ly<=1; ly++) for(let lx=-2; lx<=2; lx++) 
-        if(y-h+ly > 0 && Math.abs(lx)+Math.abs(ly) < 4) treeWorld[y-h+ly][x+lx] = 5;
-}
-
-/** PLAYER & ENTITIES **/
-const player = { x: 40000, y: 0, w: 20, h: 36, vx: 0, vy: 0, hp: 100, inventory: {1:50, 2:50, 4:0, 8:0}, selected: 1 };
+const player = { x: 80000, y: 0, w: 20, h: 36, vx: 0, vy: 0, speed: 6, jump: -12, onGround: false };
+let inventory = { 1: 50, 2: 50, 3: 0, 4: 50, 6: 50, 8: 0, 9: 0 };
+let selectedSlot = 1;
 const keys = {};
 const camera = { x: 0, y: 0 };
-let mouse = { x: 0, y: 0, down: false, rightDown: false };
+let mousePos = { x: 0, y: 0 }, isMouseDown = false, isRightMouseDown = false;
 
-function spawnSlime(x, y) {
-    entities.push({ x, y, w: 24, h: 18, vx: 0, vy: 0, hp: 30, type: 'slime', color: '#44ff44' });
-}
-
-function spawnDrop(x, y, id) {
-    drops.push({ x, y, vx: (Math.random()-0.5)*4, vy: -4, id });
-}
-
-/** PHYSICS **/
 function isSolid(px, py) {
     const gx = Math.floor(px / TILE_SIZE), gy = Math.floor(py / TILE_SIZE);
-    if (gy < 0) return false;
+    if (gx < 0 || gx >= WORLD_COLS || gy < 0) return false;
     if (gy >= WORLD_ROWS) return true;
     return world[gy][gx] !== 0 && world[gy][gx] !== 7;
 }
 
-/** LOOP **/
-function update() {
-    gameTime = (gameTime + 1) % DAY_LENGTH;
-    
-    // Player Movement
-    player.vx = keys['KeyA'] ? -5 : keys['KeyD'] ? 5 : 0;
-    player.vy += 0.5;
-    player.x += player.vx;
-    if(isSolid(player.x, player.y+5) || isSolid(player.x+player.w, player.y+5)) player.x -= player.vx;
-    player.y += player.vy;
-    if(isSolid(player.x+2, player.y+player.h) || isSolid(player.x+player.w-2, player.y+player.h)) {
-        if(player.vy > 15) player.hp -= (player.vy-10)*2;
-        player.y = Math.floor((player.y+player.h)/TILE_SIZE)*TILE_SIZE - player.h;
-        player.vy = 0;
-        if(keys['Space'] || keys['KeyW']) player.vy = -10;
-    }
+window.onkeydown = (e) => { 
+    keys[e.code] = true; 
+    if (["1","2","3","4","6"].includes(e.key)) { selectedSlot = parseInt(e.key); updateUI(); } 
+};
+window.onkeyup = (e) => keys[e.code] = false;
+canvas.onmousedown = (e) => { if (e.button === 0) isMouseDown = true; if (e.button === 2) isRightMouseDown = true; };
+window.onmouseup = () => { isMouseDown = false; isRightMouseDown = false; };
+canvas.onmousemove = (e) => { mousePos.x = e.clientX + camera.x; mousePos.y = e.clientY + camera.y; };
+canvas.oncontextmenu = (e) => e.preventDefault();
 
-    // Entities AI
-    entities.forEach((en, i) => {
-        en.vy += 0.5; en.x += en.vx; en.y += en.vy;
-        if(isSolid(en.x, en.y+en.h)) { en.y = Math.floor((en.y+en.h)/40)*40-en.h; en.vy = 0; }
-        en.vx = (player.x > en.x) ? 1.5 : -1.5;
-        if(Math.abs(player.x - en.x) < 20 && Math.abs(player.y - en.y) < 20) player.hp -= 0.5;
-        if(en.hp <= 0) { entities.splice(i, 1); spawnDrop(en.x, en.y, 9); }
-    });
+function updateMinimap() {
+    minimapCtx.fillStyle = "#000";
+    minimapCtx.fillRect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT);
+    const pX = Math.floor(player.x / TILE_SIZE), pY = Math.floor(player.y / TILE_SIZE);
+    const startX = pX - Math.floor(MINIMAP_WIDTH / (2 * MINIMAP_SCALE));
+    const startY = pY - Math.floor(MINIMAP_HEIGHT / (2 * MINIMAP_SCALE));
 
-    // Drops Pickup
-    drops.forEach((d, i) => {
-        d.vy += 0.3; d.x += d.vx; d.y += d.vy;
-        if(isSolid(d.x, d.y+10)) { d.vy = 0; d.vx *= 0.8; d.y = Math.floor((d.y+10)/40)*40-10; }
-        if(Math.hypot(player.x-d.x, player.y-d.y) < 30) {
-            player.inventory[d.id] = (player.inventory[d.id] || 0) + 1;
-            drops.splice(i, 1); updateUI();
-        }
-    });
-
-    // Interaction
-    if(mouse.down) {
-        const gx = Math.floor((mouse.x + camera.x)/TILE_SIZE);
-        const gy = Math.floor((mouse.y + camera.y)/TILE_SIZE);
-        // Hit Enemie
-        entities.forEach(en => {
-            if(Math.hypot(en.x - (mouse.x+camera.x), en.y - (mouse.y+camera.y)) < 30) en.hp -= 2;
-        });
-        // Mine
-        if(world[gy] && world[gy][gx] > 0 && world[gy][gx] !== 7) {
-            worldDamage[gy][gx]--;
-            if(worldDamage[gy][gx] <= 0) {
-                spawnDrop(gx*40, gy*40, world[gy][gx]);
-                world[gy][gx] = 0;
+    for (let my = 0; my < MINIMAP_HEIGHT; my++) {
+        for (let mx = 0; mx < MINIMAP_WIDTH; mx++) {
+            const wx = startX + Math.floor(mx / MINIMAP_SCALE);
+            const wy = startY + Math.floor(my / MINIMAP_SCALE);
+            if (wx >= 0 && wx < WORLD_COLS && wy >= 0 && wy < WORLD_ROWS) {
+                const tile = world[wy][wx];
+                const tree = treeWorld[wy][wx];
+                if (tree !== 0) minimapCtx.fillStyle = tree === 4 ? "#8B4513" : "#228B22";
+                else if (tile === 0) minimapCtx.fillStyle = "#1a1a2e";
+                else if (tile === 1) minimapCtx.fillStyle = "#4caf50";
+                else if (tile === 2) minimapCtx.fillStyle = "#795548";
+                else if (tile === 3) minimapCtx.fillStyle = "#9e9e9e";
+                else if (tile === 6) minimapCtx.fillStyle = "#f4d03f";
+                else if (tile === 7) minimapCtx.fillStyle = "#3498db";
+                else minimapCtx.fillStyle = "#333";
+                minimapCtx.fillRect(mx, my, 1, 1);
             }
         }
     }
+    minimapCtx.fillStyle = "#FF0000";
+    minimapCtx.fillRect(MINIMAP_WIDTH/2 - 2, MINIMAP_HEIGHT/2 - 2, 5, 5);
+}
 
-    // Spawner
-    if(Math.random() < 0.01 && entities.length < 5) {
-        spawnSlime(player.x + (Math.random()-0.5)*1000, player.y - 200);
+function update() {
+    gameTime = (gameTime + 1) % DAY_LENGTH;
+    player.vx = keys['KeyA'] ? -player.speed : keys['KeyD'] ? player.speed : 0;
+    player.x = Math.max(0, Math.min(player.x + player.vx, WORLD_WIDTH_PX - player.w));
+
+    if (isSolid(player.x, player.y + 5) || isSolid(player.x + player.w, player.y + 5) ||
+        isSolid(player.x, player.y + player.h - 5) || isSolid(player.x + player.w, player.y + player.h - 5)) {
+        if (player.vx > 0) player.x = Math.floor((player.x + player.w) / TILE_SIZE) * TILE_SIZE - player.w - 0.1;
+        else if (player.vx < 0) player.x = Math.floor(player.x / TILE_SIZE) * TILE_SIZE + TILE_SIZE + 0.1;
     }
 
-    camera.x += (player.x - canvas.width/2 - camera.x) * 0.1;
-    camera.y += (player.y - canvas.height/2 - camera.y) * 0.1;
+    player.vy += 0.6;
+    player.y += player.vy;
+    player.onGround = false;
+    if (isSolid(player.x + 2, player.y + player.h) || isSolid(player.x + player.w - 2, player.y + player.h)) {
+        player.y = Math.floor((player.y + player.h) / TILE_SIZE) * TILE_SIZE - player.h;
+        player.vy = 0; player.onGround = true;
+    }
+    if (player.onGround && (keys['Space'] || keys['KeyW'])) player.vy = player.jump;
 
-    if(player.hp <= 0) { alert("Você morreu!"); location.reload(); }
-    
+    const gx = Math.floor(mousePos.x / TILE_SIZE), gy = Math.floor(mousePos.y / TILE_SIZE);
+    if (Math.hypot(mousePos.x - (player.x + 10), mousePos.y - (player.y + 18)) <= REACH_DISTANCE && world[gy]) {
+        if (isMouseDown) {
+            if (world[gy][gx] !== 0 && world[gy][gx] !== 7) {
+                worldDamage[gy][gx]--;
+                if(worldDamage[gy][gx] <= 0) { 
+                    inventory[world[gy][gx]]++; world[gy][gx] = 0; updateUI(); 
+                }
+            } else if (treeWorld[gy][gx] !== 0) {
+                inventory[treeWorld[gy][gx]]++; treeWorld[gy][gx] = 0; updateUI();
+            }
+        }
+        if (isRightMouseDown && world[gy][gx] === 0 && treeWorld[gy][gx] === 0 && inventory[selectedSlot] > 0) {
+            world[gy][gx] = selectedSlot; 
+            worldDamage[gy][gx] = DURABILITY[selectedSlot]; 
+            inventory[selectedSlot]--; updateUI();
+        }
+    }
+
+    camera.x += (player.x - canvas.width / 2 - camera.x) * 0.1;
+    camera.y += (player.y - canvas.height / 2 - camera.y) * 0.1;
+    camera.x = Math.max(0, Math.min(camera.x, WORLD_WIDTH_PX - canvas.width));
+
+    document.getElementById('debug-info').innerText = `X: ${Math.floor(player.x)} | Bioma: ${getBiome(Math.floor(player.x/TILE_SIZE))} | Bloco Selecionado: ${selectedSlot}`;
+    updateMinimap();
     draw();
     requestAnimationFrame(update);
 }
 
 function draw() {
-    // Sky
-    const d = Math.sin((gameTime/DAY_LENGTH)*Math.PI*2);
-    ctx.fillStyle = `rgb(0, ${70+d*100}, ${120+d*130})`;
-    ctx.fillRect(0,0,canvas.width, canvas.height);
+    let dayRatio = Math.sin((gameTime / DAY_LENGTH) * Math.PI * 2); 
+    ctx.fillStyle = `rgb(0, ${Math.max(10, 60 + dayRatio * 100)}, ${Math.max(20, 100 + dayRatio * 155)})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
-    // World
-    const sc = Math.floor(camera.x/40)-1, ec = sc + Math.ceil(canvas.width/40)+2;
-    for(let y=0; y<WORLD_ROWS; y++) {
-        for(let x=sc; x<ec; x++) {
-            if(x<0 || x>=WORLD_COLS) continue;
-            if(treeWorld[y][x]) ctx.drawImage(tex[treeWorld[y][x]], x*40, y*40, 40, 40);
-            if(world[y][x]) ctx.drawImage(tex[world[y][x]], x*40, y*40, 40, 40);
+    const sC = Math.floor(camera.x / TILE_SIZE) - 1, eC = sC + Math.ceil(canvas.width / TILE_SIZE) + 2;
+    for (let y = 0; y < WORLD_ROWS; y++) {
+        for (let x = sC; x < eC; x++) {
+            if (x < 0 || x >= WORLD_COLS) continue;
+            if (treeWorld[y][x] !== 0) ctx.drawImage(tex[treeWorld[y][x]], x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            if (world[y][x] !== 0) ctx.drawImage(tex[world[y][x]], x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
     }
 
-    // Entities
-    entities.forEach(en => { ctx.fillStyle = en.color; ctx.fillRect(en.x, en.y, en.w, en.h); });
-    drops.forEach(dr => { if(tex[dr.id]) ctx.drawImage(tex[dr.id], dr.x, dr.y, 16, 16); });
-
-    // Player
     ctx.fillStyle = "#ff5722";
     ctx.fillRect(player.x, player.y, player.w, player.h);
     ctx.restore();
 
-    // UI
-    document.getElementById('hp-fill').style.width = player.hp + "%";
-    document.getElementById('location-info').innerText = `${getBiome(Math.floor(player.x/40))} | ${player.y > 2200 ? 'Cavernas' : 'Superfície'}`;
-    document.getElementById('debug-info').innerText = `X: ${Math.floor(player.x)} Y: ${Math.floor(player.y)}`;
+    let nightOpacity = Math.max(0, -dayRatio * 0.65);
+    ctx.fillStyle = `rgba(0, 0, 30, ${nightOpacity})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
 function updateUI() {
-    const ui = document.getElementById('inventory-ui');
-    ui.innerHTML = '';
-    [1, 2, 4, 6, 8, 9].forEach(id => {
-        const div = document.createElement('div');
-        div.className = `slot ${player.selected === id ? 'selected' : ''}`;
-        div.onclick = () => { player.selected = id; updateUI(); };
-        const count = player.inventory[id] || 0;
-        div.innerHTML = `<div class="count">${count}</div>`;
-        if(tex[id]) {
-            const icon = document.createElement('canvas'); icon.width=16; icon.height=16;
-            icon.getContext('2d').drawImage(tex[id],0,0); div.appendChild(icon);
+    [1, 2, 3, 4, 6].forEach(id => {
+        const slot = document.getElementById(`slot-${id === 6 ? 6 : id}`);
+        const finalSlot = id === 6 ? document.getElementById('slot-6') : document.getElementById(`slot-${id}`);
+        if(!finalSlot) return;
+        finalSlot.querySelector('.count').innerText = inventory[id] || 0;
+        finalSlot.classList.toggle('selected', selectedSlot === id);
+        if (!finalSlot.querySelector('canvas') && tex[id]) {
+            const icon = document.createElement('canvas'); 
+            icon.width = 16; icon.height = 16;
+            icon.getContext('2d').drawImage(tex[id], 0, 0); 
+            finalSlot.appendChild(icon);
         }
-        ui.appendChild(div);
     });
 }
-
-/** INIT **/
-window.onkeydown = (e) => { keys[e.code] = true; };
-window.onkeyup = (e) => keys[e.code] = false;
-canvas.onmousedown = (e) => { if(e.button===0) mouse.down=true; };
-window.onmouseup = () => mouse.down = false;
-canvas.onmousemove = (e) => { mouse.x = e.clientX; mouse.y = e.clientY; };
 
 initTextures();
 initWorld();
