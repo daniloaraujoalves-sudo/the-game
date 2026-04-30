@@ -2,33 +2,24 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Terraria JS - Mobs & Trees</title>
+    <title>Terraria JS - Ultimate Edition</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; user-select: none; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', monospace; user-select: none; }
         canvas { display: block; image-rendering: pixelated; cursor: crosshair; }
-        
-        .ui-overlay { position: absolute; top: 20px; left: 20px; z-index: 100; pointer-events: none; }
-        #hp-bar { width: 200px; height: 20px; background: #222; border: 2px solid #555; position: relative; }
-        #hp-fill { width: 100%; height: 100%; background: #e74c3c; transition: width 0.3s; }
-        
-        #hotbar { 
-            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); 
-            display: flex; gap: 5px; background: rgba(0,0,0,0.6); padding: 8px; border: 2px solid #444;
-        }
-        .slot { 
-            width: 45px; height: 45px; background: #333; border: 2px solid #666; 
-            display: flex; align-items: center; justify-content: center; position: relative; pointer-events: all; cursor: pointer;
-        }
-        .slot.selected { border-color: #fff; background: #555; box-shadow: 0 0 10px rgba(255,255,255,0.2); }
-        .slot canvas { width: 30px; height: 30px; }
-        .count { position: absolute; bottom: 1px; right: 3px; color: white; font-size: 11px; text-shadow: 1px 1px black; }
+        .ui-overlay { position: absolute; top: 20px; left: 20px; z-index: 100; pointer-events: none; color: white; }
+        #hp-bar { width: 200px; height: 15px; background: #222; border: 2px solid #555; margin-bottom: 5px; }
+        #hp-fill { width: 100%; height: 100%; background: #e74c3c; transition: width 0.2s; }
+        #hotbar { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; background: rgba(0,0,0,0.7); padding: 8px; border: 2px solid #444; }
+        .slot { width: 40px; height: 40px; background: #333; border: 2px solid #666; display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer; pointer-events: all; }
+        .slot.selected { border-color: #ff0; background: #444; }
+        .count { position: absolute; bottom: 0; right: 2px; font-size: 10px; text-shadow: 1px 1px #000; }
     </style>
 </head>
 <body>
 
 <div class="ui-overlay">
     <div id="hp-bar"><div id="hp-fill"></div></div>
-    <div id="biomes-info" style="color: white; margin-top: 10px; text-shadow: 2px 2px 4px #000;">Floresta</div>
+    <div id="info">Seed: 0 | Bioma: Floresta</div>
 </div>
 
 <div id="hotbar"></div>
@@ -40,110 +31,118 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-/** CONFIGS **/
+/** CONFIGURAÇÕES, SEEDS E MUNDO **/
 const TILE_SIZE = 40;
-const WORLD_COLS = 500;
-const WORLD_ROWS = 100;
-const REACH = TILE_SIZE * 5.5;
-const DAY_LENGTH = 30000;
+const WORLD_COLS = 600;
+const WORLD_ROWS = 120;
+const SEEDS = [1234, 9876, 5555, 1010, 8888, 4321, 6789, 2468, 1357, 9999];
+const currentSeed = SEEDS[Math.floor(Math.random() * SEEDS.length)];
+document.getElementById('info').innerText = `Seed: ${currentSeed} | Bioma: Floresta`;
 
-const DURABILITY = { 1: 15, 2: 15, 3: 45, 4: 25, 5: 10, 6: 15, 8: 60 };
+let seedState = currentSeed;
+function sRandom() {
+    seedState = (seedState * 1664525 + 1013904223) % 4294967296;
+    return seedState / 4294967296;
+}
 
 let world = [], worldDmg = [], treeWorld = [], lightMap = [];
 let drops = [], entities = [];
 let gameTime = 10000;
 const tex = {};
-
-const player = { 
-    x: 4000, y: 1000, w: 20, h: 36, vx: 0, vy: 0, hp: 100, 
-    selected: 1, inv: {1:10, 2:10, 3:0, 4:0, 5:0, 6:0, 8:0} 
-};
-
+const player = { x: 12000, y: 1000, w: 22, h: 38, vx: 0, vy: 0, hp: 100, selected: 1, inv: {1:30, 2:30, 3:0, 4:0, 8:0} };
 const keys = {};
 const camera = { x: 0, y: 0 };
 let mouse = { x: 0, y: 0, down: false, rightDown: false };
 
-/** TEXTURAS **/
+/** INICIALIZAÇÃO DE TEXTURAS **/
 function initTextures() {
     const palette = {
-        1: ["#48b04d", "#2d6b30", "grass"], 2: ["#8b5a2b", "#5d3a1a", "dirt"],
-        3: ["#7a7a7a", "#4a4a4a", "stone"], 4: ["#6b4423", "#3d2714", "wood"],
-        5: ["#2d9c3a", "#1a5e22", "leaves"], 6: ["#e3c16f", "#bca158", "sand"],
-        8: ["#d3d3d3", "#808080", "iron"]
+        1: ["#48b04d", "#2d6b30"], 2: ["#8b5a2b", "#5d3a1a"], 3: ["#7a7a7a", "#4a4a4a"],
+        4: ["#6b4423", "#3d2714"], 5: ["#2ecc71", "#27ae60"], 6: ["#e3c16f", "#bca158"], 8: ["#d3d3d3", "#7f8c8d"]
     };
     for (let id in palette) {
         const t = document.createElement('canvas'); t.width = 16; t.height = 16;
         const tc = t.getContext('2d');
         tc.fillStyle = palette[id][0]; tc.fillRect(0,0,16,16);
-        tc.fillStyle = palette[id][1];
-        if(palette[id][2] === "grass") tc.fillRect(0, 0, 16, 5);
-        if(palette[id][2] === "dirt") { tc.globalAlpha = 0.3; tc.fillRect(2,2,4,4); tc.fillRect(8,9,3,3); }
+        tc.fillStyle = palette[id][1]; tc.globalAlpha = 0.3;
+        tc.fillRect(sRandom()*8, sRandom()*8, 5, 5);
         tex[id] = t;
     }
 }
 
-/** MUNDO & LUZ **/
+/** GERAÇÃO DE MUNDO COM CAVERNAS **/
 function initWorld() {
     for (let y = 0; y < WORLD_ROWS; y++) {
         world[y] = new Int8Array(WORLD_COLS);
-        worldDmg[y] = new Int16Array(WORLD_COLS);
+        worldDmg[y] = new Int16Array(WORLD_COLS).fill(20);
         treeWorld[y] = new Int8Array(WORLD_COLS);
         lightMap[y] = new Float32Array(WORLD_COLS);
     }
+
+    // Camadas de terra e pedra
     for (let x = 0; x < WORLD_COLS; x++) {
-        let surf = 45 + Math.floor(Math.sin(x*0.1)*5 + Math.sin(x*0.02)*12);
-        for (let y = 0; y < WORLD_ROWS; y++) {
-            if (y > surf) {
-                let type = (y > surf + 15) ? 3 : 2;
-                if(y > 70 && Math.random() < 0.02) type = 8;
-                world[y][x] = type;
-                worldDmg[y][x] = DURABILITY[type];
-            } else if (y === surf) {
-                world[y][x] = 1; worldDmg[y][x] = DURABILITY[1];
-                if(x % 12 === 0 && Math.random() > 0.4) spawnTree(x, surf);
+        let surf = 50 + Math.floor(Math.sin(x * 0.1) * 6 + Math.sin(x * 0.02) * 10);
+        for (let y = surf; y < WORLD_ROWS; y++) {
+            let type = (y < surf + 15) ? 2 : 3;
+            if (y === surf) type = 1;
+            if (y > 80 && sRandom() < 0.02) type = 8;
+            world[y][x] = type;
+        }
+        // Árvores
+        if (x % 12 === 0 && sRandom() > 0.4) {
+            let h = 5 + Math.floor(sRandom() * 4);
+            for(let i=1; i<=h; i++) if(surf-i > 0) treeWorld[surf-i][x] = 4;
+            for(let ly=-2; ly<=0; ly++) for(let lx=-1; lx<=1; lx++) 
+                if(surf-h+ly > 0) treeWorld[surf-h+ly][x+lx] = 5;
+        }
+    }
+
+    // Escavação de Cavernas (Drunkard Walk)
+    for (let i = 0; i < 50; i++) {
+        let cx = Math.floor(sRandom() * WORLD_COLS);
+        let cy = Math.floor(60 + sRandom() * 40);
+        for (let j = 0; j < 80; j++) {
+            for(let dy=-1; dy<=2; dy++) for(let dx=-1; dx<=2; dx++) {
+                if (world[cy+dy] && world[cy+dy][cx+dx]) world[cy+dy][cx+dx] = 0;
             }
+            cx += Math.floor(sRandom() * 3) - 1;
+            cy += Math.floor(sRandom() * 3) - 1;
+            if (cx < 5 || cx > WORLD_COLS-5 || cy < 45 || cy > WORLD_ROWS-5) break;
         }
     }
     updateLight();
-}
-
-function spawnTree(x, y) {
-    let h = 5 + Math.floor(Math.random()*4);
-    for(let i=1; i<=h; i++) if(y-i > 0) treeWorld[y-i][x] = 4;
-    for(let ly=-3; ly<=0; ly++) for(let lx=-2; lx<=2; lx++)
-        if(y-h+ly > 0 && Math.abs(lx)+Math.abs(ly+1) < 4) treeWorld[y-h+ly][x+lx] = 5;
-}
-
-function spawnSlime(x, y) {
-    entities.push({ x, y, w: 28, h: 20, vx: 0, vy: 0, hp: 40, color: "#2ecc71" });
 }
 
 function updateLight() {
     for (let x = 0; x < WORLD_COLS; x++) {
         let l = 1.0;
         for (let y = 0; y < WORLD_ROWS; y++) {
-            if (world[y][x] !== 0) l -= 0.18;
-            if (l < 0.15) l = 0.15;
+            if (world[y][x] !== 0) l -= 0.16;
+            if (l < 0.12) l = 0.12;
             lightMap[y][x] = l;
         }
     }
 }
 
-/** FISICA E LOGICA **/
+/** LÓGICA DE FÍSICA E ENTIDADES **/
 function isSolid(x, y) {
     const gx = Math.floor(x/TILE_SIZE), gy = Math.floor(y/TILE_SIZE);
     return world[gy] && world[gy][gx] !== 0;
 }
 
-function spawnDrop(x, y, id) {
-    if(id === 0) return;
-    drops.push({ x, y, id, vx: (Math.random()-0.5)*4, vy: -3 });
+function spawnMob() {
+    const dir = sRandom() > 0.5 ? 1 : -1;
+    const sx = player.x + (dir * (canvas.width/2 + 100));
+    const gy = Math.floor(player.y / TILE_SIZE);
+    // Só spawna se houver chão
+    if (sx > 0 && sx < WORLD_COLS * TILE_SIZE) {
+        entities.push({ x: sx, y: player.y - 200, w: 28, h: 20, vx: 0, vy: 0, hp: 40, jumpTimer: 0 });
+    }
 }
 
 function update() {
-    gameTime = (gameTime + 1) % DAY_LENGTH;
-    
-    // Player
+    gameTime++;
+    // Movimento Player
     player.vx = keys['KeyA'] ? -5 : keys['KeyD'] ? 5 : 0;
     player.vy += 0.5;
     player.x += player.vx;
@@ -155,148 +154,111 @@ function update() {
         if(keys['Space'] || keys['KeyW']) player.vy = -10.5;
     }
 
-    // Interação (Blocos, Árvores e Mobs)
-    const mx = mouse.x + camera.x;
-    const my = mouse.y + camera.y;
-    const gx = Math.floor(mx/TILE_SIZE);
-    const gy = Math.floor(my/TILE_SIZE);
-    const dist = Math.hypot(mx-(player.x+10), my-(player.y+18));
+    // Mouse Actions
+    const mx = mouse.x + camera.x, my = mouse.y + camera.y;
+    const gx = Math.floor(mx/40), gy = Math.floor(my/40);
+    const dist = Math.hypot(mx-(player.x+10), my-(player.y+20));
 
-    if(mouse.down) {
-        // Atacar Mobs
-        entities.forEach(en => {
-            if(Math.hypot(en.x - mx, en.y - my) < 30) en.hp -= 2;
-        });
-
-        // Quebrar Coisas
-        if(dist < REACH && gy >= 0 && gy < WORLD_ROWS) {
-            if(world[gy][gx] !== 0) { // Quebrar blocos
+    if (mouse.down) {
+        entities.forEach(en => { if(Math.hypot(en.x-mx, en.y-my) < 40) en.hp -= 2; });
+        if(dist < 220 && world[gy]) {
+            if(world[gy][gx] !== 0) {
                 worldDmg[gy][gx]--;
                 if(worldDmg[gy][gx] <= 0) {
-                    spawnDrop(gx*40, gy*40, world[gy][gx]);
-                    world[gy][gx] = 0;
-                    updateLight();
+                    drops.push({x: mx, y: my, id: world[gy][gx], vy: -3, vx: (sRandom()-0.5)*4});
+                    world[gy][gx] = 0; updateLight();
                 }
-            } else if(treeWorld[gy][gx] !== 0) { // Quebrar árvores
-                spawnDrop(gx*40, gy*40, treeWorld[gy][gx]);
+            } else if(treeWorld[gy][gx] !== 0) {
+                drops.push({x: mx, y: my, id: treeWorld[gy][gx], vy: -2, vx: (sRandom()-0.5)*2});
                 treeWorld[gy][gx] = 0;
             }
         }
     }
-
-    if(mouse.rightDown && dist < REACH && world[gy] && world[gy][gx] === 0 && treeWorld[gy][gx] === 0) {
+    if (mouse.rightDown && dist < 220 && world[gy] && world[gy][gx] === 0 && treeWorld[gy][gx] === 0) {
         if(player.inv[player.selected] > 0) {
             world[gy][gx] = player.selected;
-            worldDmg[gy][gx] = DURABILITY[player.selected];
-            player.inv[player.selected]--;
-            updateLight();
+            worldDmg[gy][gx] = 20;
+            player.inv[player.selected]--; updateLight(); updateUI();
         }
     }
 
-    // Mobs (Slimes)
+    // Mobs AI (Slimes)
+    if (gameTime % 400 === 0 && entities.length < 6) spawnMob();
     entities.forEach((en, i) => {
-        en.vy += 0.4;
-        en.x += en.vx;
-        en.y += en.vy;
-        
+        en.vy += 0.4; en.x += en.vx; en.y += en.vy;
         if(isSolid(en.x, en.y+en.h) || isSolid(en.x+en.w, en.y+en.h)) {
             en.y = Math.floor((en.y+en.h)/40)*40 - en.h;
-            en.vy = -7; // Pulo do slime
-            en.vx = (player.x > en.x) ? 2 : -2;
+            en.vy = 0; en.vx *= 0.5;
+            if(en.jumpTimer-- <= 0) {
+                en.vy = -7 - sRandom()*3;
+                en.vx = (player.x > en.x ? 3 : -3);
+                en.jumpTimer = 50 + sRandom()*50;
+            }
         }
-        
-        // Dano no player
-        if(Math.abs(player.x - en.x) < 20 && Math.abs(player.y - en.y) < 20) {
-            player.hp -= 0.5;
-            player.vx += (player.x > en.x ? 5 : -5);
-        }
-        if(en.hp <= 0) entities.splice(i, 1);
+        if(Math.hypot(player.x-en.x, player.y-en.y) < 30) { player.hp -= 0.3; player.vx += (player.x > en.x ? 8 : -8); }
+        if(en.hp <= 0) { drops.push({x: en.x, y: en.y, id: 5, vy: -4, vx: 0}); entities.splice(i, 1); }
     });
 
-    if(Math.random() < 0.005 && entities.length < 5) {
-        spawnSlime(player.x + (Math.random()-0.5)*1000, player.y - 400);
-    }
-
-    // Drops & Camera
+    // Drops e Câmera
     drops.forEach((d, i) => {
-        d.vy += 0.2; d.x += d.vx; d.y += d.vy;
-        if(isSolid(d.x, d.y+10)) { d.vy = 0; d.vx *= 0.8; d.y = Math.floor((d.y+10)/40)*40-10; }
-        let distP = Math.hypot(player.x-d.x, player.y-d.y);
-        if(distP < 80) { d.vx += (player.x-d.x)*0.05; d.vy += (player.y-d.y)*0.05; }
-        if(distP < 20) { player.inv[d.id] = (player.inv[d.id]||0)+1; drops.splice(i,1); updateUI(); }
+        d.y += d.vy; d.vy += 0.2; d.x += d.vx;
+        if(isSolid(d.x, d.y+10)) { d.vy = 0; d.vx = 0; d.y = Math.floor((d.y+10)/40)*40-12; }
+        if(Math.hypot(player.x-d.x, player.y-d.y) < 50) { player.inv[d.id] = (player.inv[d.id]||0)+1; drops.splice(i,1); updateUI(); }
     });
 
     camera.x += (player.x - canvas.width/2 - camera.x) * 0.1;
     camera.y += (player.y - canvas.height/2 - camera.y) * 0.1;
 
-    if(player.hp <= 0) { alert("Você morreu!"); location.reload(); }
-    
     draw();
     requestAnimationFrame(update);
 }
 
 function draw() {
-    const d = Math.sin((gameTime/DAY_LENGTH)*Math.PI);
-    ctx.fillStyle = `rgb(0, ${80*d + 20}, ${180*d + 40})`;
+    // Céu
+    const sky = Math.sin((gameTime/20000)*Math.PI);
+    ctx.fillStyle = `rgb(0, ${100*sky+20}, ${200*sky+40})`;
     ctx.fillRect(0,0,canvas.width, canvas.height);
 
-    ctx.save();
-    ctx.translate(-camera.x, -camera.y);
+    ctx.save(); ctx.translate(-camera.x, -camera.y);
+    
+    let xStart = Math.floor(camera.x/40)-1, xEnd = xStart + Math.ceil(canvas.width/40)+2;
+    let yStart = Math.floor(camera.y/40)-1, yEnd = yStart + Math.ceil(canvas.height/40)+2;
 
-    const sc = Math.floor(camera.x/40)-1, ec = sc + Math.ceil(canvas.width/40)+2;
-    const sy = Math.floor(camera.y/40)-1, ey = sy + Math.ceil(canvas.height/40)+2;
-
-    for(let y=Math.max(0, sy); y<Math.min(WORLD_ROWS, ey); y++) {
-        for(let x=sc; x<ec; x++) {
+    for(let y=Math.max(0, yStart); y<Math.min(WORLD_ROWS, yEnd); y++) {
+        for(let x=xStart; x<xEnd; x++) {
             if(x<0 || x>=WORLD_COLS) continue;
             let id = world[y][x] || treeWorld[y][x];
             if(id) {
                 ctx.drawImage(tex[id], x*40, y*40, 40, 40);
-                ctx.fillStyle = `rgba(0,0,15,${1 - lightMap[y][x]})`;
+                ctx.fillStyle = `rgba(0,0,20,${1-lightMap[y][x]})`;
                 ctx.fillRect(x*40, y*40, 40, 40);
             }
         }
     }
-
-    entities.forEach(en => { ctx.fillStyle = en.color; ctx.fillRect(en.x, en.y, en.w, en.h); });
-    drops.forEach(d => ctx.drawImage(tex[d.id], d.x+10, d.y+10, 20, 20));
-    
-    ctx.fillStyle = "#e67e22";
-    ctx.fillRect(player.x, player.y, player.w, player.h);
-
+    entities.forEach(en => { ctx.fillStyle = "#2ecc71"; ctx.fillRect(en.x, en.y, en.w, en.h); });
+    drops.forEach(d => { if(tex[d.id]) ctx.drawImage(tex[d.id], d.x, d.y, 16, 16); });
+    ctx.fillStyle = "#e67e22"; ctx.fillRect(player.x, player.y, player.w, player.h);
     ctx.restore();
+    
     document.getElementById('hp-fill').style.width = player.hp + "%";
-    updateUI();
 }
 
 function updateUI() {
-    const hotbar = document.getElementById('hotbar');
-    if(hotbar.children.length === 0) { // Só reconstrói se estiver vazio
-        [1, 2, 3, 4, 5, 6, 8].forEach(id => {
-            const slot = document.createElement('div');
-            slot.className = `slot ${player.selected === id ? 'selected' : ''}`;
-            slot.id = "slot-"+id;
-            slot.onclick = () => { player.selected = id; updateUI(); };
-            const icon = document.createElement('canvas'); icon.width=16; icon.height=16;
-            icon.getContext('2d').drawImage(tex[id],0,0);
-            slot.appendChild(icon);
-            slot.innerHTML += `<div class="count">${player.inv[id]||0}</div>`;
-            hotbar.appendChild(slot);
-        });
-    } else {
-        [1, 2, 3, 4, 5, 6, 8].forEach(id => {
-            const slot = document.getElementById("slot-"+id);
-            slot.className = `slot ${player.selected === id ? 'selected' : ''}`;
-            slot.querySelector('.count').innerText = player.inv[id]||0;
-        });
-    }
+    const hb = document.getElementById('hotbar'); hb.innerHTML = '';
+    [1,2,3,4,8].forEach(id => {
+        const s = document.createElement('div');
+        s.className = `slot ${player.selected === id ? 'selected' : ''}`;
+        s.onclick = () => { player.selected = id; updateUI(); };
+        const icon = document.createElement('canvas'); icon.width=16; icon.height=16;
+        icon.getContext('2d').drawImage(tex[id],0,0);
+        s.appendChild(icon);
+        s.innerHTML += `<div class="count">${player.inv[id]||0}</div>`;
+        hb.appendChild(s);
+    });
 }
 
-/** INPUTS **/
-window.onkeydown = (e) => {
-    keys[e.code] = true;
-    if(e.key >= 1 && e.key <= 8) { player.selected = parseInt(e.key); updateUI(); }
-};
+/** EVENTOS **/
+window.onkeydown = (e) => { keys[e.code] = true; if(e.key >= 1 && e.key <= 5) { player.selected = [1,2,3,4,8][e.key-1]; updateUI(); } };
 window.onkeyup = (e) => keys[e.code] = false;
 canvas.onmousedown = (e) => { if(e.button===0) mouse.down=true; if(e.button===2) mouse.rightDown=true; };
 window.onmouseup = () => { mouse.down=false; mouse.rightDown=false; };
@@ -305,6 +267,7 @@ canvas.oncontextmenu = (e) => e.preventDefault();
 
 initTextures();
 initWorld();
+updateUI();
 update();
 </script>
 </body>
