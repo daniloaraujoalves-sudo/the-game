@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Terraria JS - Ultimate Edition</title>
+    <title>Terraria JS - Advanced Caves</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', monospace; user-select: none; }
         canvas { display: block; image-rendering: pixelated; cursor: crosshair; }
@@ -19,7 +19,7 @@
 
 <div class="ui-overlay">
     <div id="hp-bar"><div id="hp-fill"></div></div>
-    <div id="info">Seed: 0 | Bioma: Floresta</div>
+    <div id="info">Seed: 0 | Exploração Subterrânea</div>
 </div>
 
 <div id="hotbar"></div>
@@ -31,13 +31,13 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-/** CONFIGURAÇÕES, SEEDS E MUNDO **/
+/** CONFIGURAÇÕES E SEEDS **/
 const TILE_SIZE = 40;
-const WORLD_COLS = 600;
-const WORLD_ROWS = 120;
+const WORLD_COLS = 800; // Aumentado para mais exploração
+const WORLD_ROWS = 150; // Mais fundo
 const SEEDS = [1234, 9876, 5555, 1010, 8888, 4321, 6789, 2468, 1357, 9999];
 const currentSeed = SEEDS[Math.floor(Math.random() * SEEDS.length)];
-document.getElementById('info').innerText = `Seed: ${currentSeed} | Bioma: Floresta`;
+document.getElementById('info').innerText = `Seed: ${currentSeed} | Use 'WAD' para mover`;
 
 let seedState = currentSeed;
 function sRandom() {
@@ -49,12 +49,12 @@ let world = [], worldDmg = [], treeWorld = [], lightMap = [];
 let drops = [], entities = [];
 let gameTime = 10000;
 const tex = {};
-const player = { x: 12000, y: 1000, w: 22, h: 38, vx: 0, vy: 0, hp: 100, selected: 1, inv: {1:30, 2:30, 3:0, 4:0, 8:0} };
+const player = { x: 16000, y: 1000, w: 22, h: 38, vx: 0, vy: 0, hp: 100, selected: 1, inv: {1:30, 2:30, 3:0, 4:0, 8:0} };
 const keys = {};
 const camera = { x: 0, y: 0 };
 let mouse = { x: 0, y: 0, down: false, rightDown: false };
 
-/** INICIALIZAÇÃO DE TEXTURAS **/
+/** TEXTURAS **/
 function initTextures() {
     const palette = {
         1: ["#48b04d", "#2d6b30"], 2: ["#8b5a2b", "#5d3a1a"], 3: ["#7a7a7a", "#4a4a4a"],
@@ -70,44 +70,62 @@ function initTextures() {
     }
 }
 
-/** GERAÇÃO DE MUNDO COM CAVERNAS **/
+/** GERAÇÃO DE MUNDO COM CAVERNAS SINUOSAS **/
 function initWorld() {
     for (let y = 0; y < WORLD_ROWS; y++) {
         world[y] = new Int8Array(WORLD_COLS);
-        worldDmg[y] = new Int16Array(WORLD_COLS).fill(20);
+        worldDmg[y] = new Int16Array(WORLD_COLS).fill(25);
         treeWorld[y] = new Int8Array(WORLD_COLS);
         lightMap[y] = new Float32Array(WORLD_COLS);
     }
 
-    // Camadas de terra e pedra
+    // 1. Relevo da Superfície
     for (let x = 0; x < WORLD_COLS; x++) {
-        let surf = 50 + Math.floor(Math.sin(x * 0.1) * 6 + Math.sin(x * 0.02) * 10);
+        let surf = 40 + Math.floor(Math.sin(x * 0.05) * 8 + Math.sin(x * 0.01) * 15);
         for (let y = surf; y < WORLD_ROWS; y++) {
-            let type = (y < surf + 15) ? 2 : 3;
+            let type = (y < surf + 20) ? 2 : 3;
             if (y === surf) type = 1;
-            if (y > 80 && sRandom() < 0.02) type = 8;
+            if (y > 90 && sRandom() < 0.015) type = 8;
             world[y][x] = type;
         }
-        // Árvores
-        if (x % 12 === 0 && sRandom() > 0.4) {
-            let h = 5 + Math.floor(sRandom() * 4);
+        if (x % 15 === 0 && sRandom() > 0.45) {
+            let h = 6 + Math.floor(sRandom() * 4);
             for(let i=1; i<=h; i++) if(surf-i > 0) treeWorld[surf-i][x] = 4;
             for(let ly=-2; ly<=0; ly++) for(let lx=-1; lx<=1; lx++) 
-                if(surf-h+ly > 0) treeWorld[surf-h+ly][x+lx] = 5;
+                if(surf-h+ly > 0 && x+lx >= 0 && x+lx < WORLD_COLS) treeWorld[surf-h+ly][x+lx] = 5;
         }
     }
 
-    // Escavação de Cavernas (Drunkard Walk)
-    for (let i = 0; i < 50; i++) {
+    // 2. Sistema de Cavernas Avançado (Vermin Algorithm)
+    const numTunnels = 60;
+    for (let i = 0; i < numTunnels; i++) {
         let cx = Math.floor(sRandom() * WORLD_COLS);
-        let cy = Math.floor(60 + sRandom() * 40);
-        for (let j = 0; j < 80; j++) {
-            for(let dy=-1; dy<=2; dy++) for(let dx=-1; dx<=2; dx++) {
-                if (world[cy+dy] && world[cy+dy][cx+dx]) world[cy+dy][cx+dx] = 0;
+        let cy = Math.floor(50 + sRandom() * (WORLD_ROWS - 60));
+        let angle = sRandom() * Math.PI * 2;
+        let tunnelLength = 50 + Math.floor(sRandom() * 150);
+        let radius = 1.5 + sRandom() * 2.5;
+
+        for (let step = 0; step < tunnelLength; step++) {
+            // Desenha o círculo da caverna
+            for (let dy = -Math.ceil(radius); dy <= radius; dy++) {
+                for (let dx = -Math.ceil(radius); dx <= radius; dx++) {
+                    let nx = Math.floor(cx + dx);
+                    let ny = Math.floor(cy + dy);
+                    if (nx >= 0 && nx < WORLD_COLS && ny >= 0 && ny < WORLD_ROWS) {
+                        if (dx*dx + dy*dy <= radius*radius) world[ny][nx] = 0;
+                    }
+                }
             }
-            cx += Math.floor(sRandom() * 3) - 1;
-            cy += Math.floor(sRandom() * 3) - 1;
-            if (cx < 5 || cx > WORLD_COLS-5 || cy < 45 || cy > WORLD_ROWS-5) break;
+            // Move o escavador
+            angle += (sRandom() - 0.5) * 0.8; // Curvatura
+            cx += Math.cos(angle) * 1.5;
+            cy += Math.sin(angle) * 1.5;
+            
+            // Ocasionalmente cria uma câmara maior
+            if (sRandom() < 0.05) radius = 3 + sRandom() * 4;
+            else radius = Math.max(1.5, radius * 0.95);
+            
+            if (cy < 35 || cy > WORLD_ROWS - 5) break;
         }
     }
     updateLight();
@@ -117,14 +135,14 @@ function updateLight() {
     for (let x = 0; x < WORLD_COLS; x++) {
         let l = 1.0;
         for (let y = 0; y < WORLD_ROWS; y++) {
-            if (world[y][x] !== 0) l -= 0.16;
-            if (l < 0.12) l = 0.12;
+            if (world[y][x] !== 0) l -= 0.14; // Luz penetra um pouco mais
+            if (l < 0.1) l = 0.1;
             lightMap[y][x] = l;
         }
     }
 }
 
-/** LÓGICA DE FÍSICA E ENTIDADES **/
+/** FÍSICA E INTERAÇÃO **/
 function isSolid(x, y) {
     const gx = Math.floor(x/TILE_SIZE), gy = Math.floor(y/TILE_SIZE);
     return world[gy] && world[gy][gx] !== 0;
@@ -132,9 +150,7 @@ function isSolid(x, y) {
 
 function spawnMob() {
     const dir = sRandom() > 0.5 ? 1 : -1;
-    const sx = player.x + (dir * (canvas.width/2 + 100));
-    const gy = Math.floor(player.y / TILE_SIZE);
-    // Só spawna se houver chão
+    const sx = player.x + (dir * (canvas.width/2 + 50));
     if (sx > 0 && sx < WORLD_COLS * TILE_SIZE) {
         entities.push({ x: sx, y: player.y - 200, w: 28, h: 20, vx: 0, vy: 0, hp: 40, jumpTimer: 0 });
     }
@@ -142,8 +158,8 @@ function spawnMob() {
 
 function update() {
     gameTime++;
-    // Movimento Player
-    player.vx = keys['KeyA'] ? -5 : keys['KeyD'] ? 5 : 0;
+    // Player
+    player.vx = keys['KeyA'] ? -5.5 : keys['KeyD'] ? 5.5 : 0;
     player.vy += 0.5;
     player.x += player.vx;
     if(isSolid(player.x, player.y+5) || isSolid(player.x+player.w, player.y+5)) player.x -= player.vx;
@@ -151,17 +167,17 @@ function update() {
     if(isSolid(player.x+2, player.y+player.h) || isSolid(player.x+player.w-2, player.y+player.h)) {
         player.y = Math.floor((player.y+player.h)/40)*40 - player.h;
         player.vy = 0;
-        if(keys['Space'] || keys['KeyW']) player.vy = -10.5;
+        if(keys['Space'] || keys['KeyW']) player.vy = -11;
     }
 
-    // Mouse Actions
+    // Ações
     const mx = mouse.x + camera.x, my = mouse.y + camera.y;
     const gx = Math.floor(mx/40), gy = Math.floor(my/40);
     const dist = Math.hypot(mx-(player.x+10), my-(player.y+20));
 
     if (mouse.down) {
-        entities.forEach(en => { if(Math.hypot(en.x-mx, en.y-my) < 40) en.hp -= 2; });
-        if(dist < 220 && world[gy]) {
+        entities.forEach(en => { if(Math.hypot(en.x-mx, en.y-my) < 40) en.hp -= 3; });
+        if(dist < 250 && world[gy]) {
             if(world[gy][gx] !== 0) {
                 worldDmg[gy][gx]--;
                 if(worldDmg[gy][gx] <= 0) {
@@ -174,36 +190,42 @@ function update() {
             }
         }
     }
-    if (mouse.rightDown && dist < 220 && world[gy] && world[gy][gx] === 0 && treeWorld[gy][gx] === 0) {
+    if (mouse.rightDown && dist < 250 && world[gy] && world[gy][gx] === 0) {
         if(player.inv[player.selected] > 0) {
             world[gy][gx] = player.selected;
-            worldDmg[gy][gx] = 20;
+            worldDmg[gy][gx] = 25;
             player.inv[player.selected]--; updateLight(); updateUI();
         }
     }
 
-    // Mobs AI (Slimes)
-    if (gameTime % 400 === 0 && entities.length < 6) spawnMob();
+    // Mobs
+    if (gameTime % 450 === 0 && entities.length < 8) spawnMob();
     entities.forEach((en, i) => {
         en.vy += 0.4; en.x += en.vx; en.y += en.vy;
         if(isSolid(en.x, en.y+en.h) || isSolid(en.x+en.w, en.y+en.h)) {
             en.y = Math.floor((en.y+en.h)/40)*40 - en.h;
-            en.vy = 0; en.vx *= 0.5;
+            en.vy = 0;
             if(en.jumpTimer-- <= 0) {
-                en.vy = -7 - sRandom()*3;
-                en.vx = (player.x > en.x ? 3 : -3);
-                en.jumpTimer = 50 + sRandom()*50;
+                en.vy = -8 - sRandom()*2;
+                en.vx = (player.x > en.x ? 2.5 : -2.5);
+                en.jumpTimer = 60 + sRandom()*40;
             }
         }
-        if(Math.hypot(player.x-en.x, player.y-en.y) < 30) { player.hp -= 0.3; player.vx += (player.x > en.x ? 8 : -8); }
-        if(en.hp <= 0) { drops.push({x: en.x, y: en.y, id: 5, vy: -4, vx: 0}); entities.splice(i, 1); }
+        if(Math.hypot(player.x-en.x, player.y-en.y) < 30) { 
+            player.hp -= 0.4; 
+            player.vx = (player.x > en.x ? 10 : -10); // Knockback
+        }
+        if(en.hp <= 0) { drops.push({x: en.x, y: en.y, id: 8, vy: -4, vx: 0}); entities.splice(i, 1); }
     });
 
-    // Drops e Câmera
+    // Itens
     drops.forEach((d, i) => {
         d.y += d.vy; d.vy += 0.2; d.x += d.vx;
         if(isSolid(d.x, d.y+10)) { d.vy = 0; d.vx = 0; d.y = Math.floor((d.y+10)/40)*40-12; }
-        if(Math.hypot(player.x-d.x, player.y-d.y) < 50) { player.inv[d.id] = (player.inv[d.id]||0)+1; drops.splice(i,1); updateUI(); }
+        if(Math.hypot(player.x-d.x, player.y-d.y) < 50) { 
+            player.inv[d.id] = (player.inv[d.id]||0)+1; 
+            drops.splice(i,1); updateUI(); 
+        }
     });
 
     camera.x += (player.x - canvas.width/2 - camera.x) * 0.1;
@@ -214,23 +236,22 @@ function update() {
 }
 
 function draw() {
-    // Céu
-    const sky = Math.sin((gameTime/20000)*Math.PI);
-    ctx.fillStyle = `rgb(0, ${100*sky+20}, ${200*sky+40})`;
+    const sky = Math.sin((gameTime/25000)*Math.PI);
+    ctx.fillStyle = `rgb(10, ${90*sky+10}, ${180*sky+30})`;
     ctx.fillRect(0,0,canvas.width, canvas.height);
 
     ctx.save(); ctx.translate(-camera.x, -camera.y);
     
-    let xStart = Math.floor(camera.x/40)-1, xEnd = xStart + Math.ceil(canvas.width/40)+2;
-    let yStart = Math.floor(camera.y/40)-1, yEnd = yStart + Math.ceil(canvas.height/40)+2;
+    let xS = Math.floor(camera.x/40)-1, xE = xS + Math.ceil(canvas.width/40)+2;
+    let yS = Math.floor(camera.y/40)-1, yE = yS + Math.ceil(canvas.height/40)+2;
 
-    for(let y=Math.max(0, yStart); y<Math.min(WORLD_ROWS, yEnd); y++) {
-        for(let x=xStart; x<xEnd; x++) {
+    for(let y=Math.max(0, yS); y<Math.min(WORLD_ROWS, yE); y++) {
+        for(let x=xS; x<xE; x++) {
             if(x<0 || x>=WORLD_COLS) continue;
             let id = world[y][x] || treeWorld[y][x];
             if(id) {
                 ctx.drawImage(tex[id], x*40, y*40, 40, 40);
-                ctx.fillStyle = `rgba(0,0,20,${1-lightMap[y][x]})`;
+                ctx.fillStyle = `rgba(0,0,15,${1-lightMap[y][x]})`;
                 ctx.fillRect(x*40, y*40, 40, 40);
             }
         }
@@ -257,7 +278,6 @@ function updateUI() {
     });
 }
 
-/** EVENTOS **/
 window.onkeydown = (e) => { keys[e.code] = true; if(e.key >= 1 && e.key <= 5) { player.selected = [1,2,3,4,8][e.key-1]; updateUI(); } };
 window.onkeyup = (e) => keys[e.code] = false;
 canvas.onmousedown = (e) => { if(e.button===0) mouse.down=true; if(e.button===2) mouse.rightDown=true; };
