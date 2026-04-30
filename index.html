@@ -2,9 +2,9 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Terraria JS - Full Survival</title>
+    <title>Terraria JS - Mobs & Trees</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; user-select: none; }
         canvas { display: block; image-rendering: pixelated; cursor: crosshair; }
         
         .ui-overlay { position: absolute; top: 20px; left: 20px; z-index: 100; pointer-events: none; }
@@ -47,16 +47,16 @@ const WORLD_ROWS = 100;
 const REACH = TILE_SIZE * 5.5;
 const DAY_LENGTH = 30000;
 
-const DURABILITY = { 1: 15, 2: 15, 3: 45, 4: 25, 5: 10, 6: 15, 8: 60 }; // Delay de mineração
+const DURABILITY = { 1: 15, 2: 15, 3: 45, 4: 25, 5: 10, 6: 15, 8: 60 };
 
 let world = [], worldDmg = [], treeWorld = [], lightMap = [];
-let drops = [], particles = [];
+let drops = [], entities = [];
 let gameTime = 10000;
 const tex = {};
 
 const player = { 
     x: 4000, y: 1000, w: 20, h: 36, vx: 0, vy: 0, hp: 100, 
-    selected: 1, inv: {1:10, 2:10, 3:0, 4:0, 6:0, 8:0} 
+    selected: 1, inv: {1:10, 2:10, 3:0, 4:0, 5:0, 6:0, 8:0} 
 };
 
 const keys = {};
@@ -82,7 +82,7 @@ function initTextures() {
     }
 }
 
-/** GERAR MUNDO **/
+/** MUNDO & LUZ **/
 function initWorld() {
     for (let y = 0; y < WORLD_ROWS; y++) {
         world[y] = new Int8Array(WORLD_COLS);
@@ -100,7 +100,7 @@ function initWorld() {
                 worldDmg[y][x] = DURABILITY[type];
             } else if (y === surf) {
                 world[y][x] = 1; worldDmg[y][x] = DURABILITY[1];
-                if(x % 10 === 0 && Math.random() > 0.3) spawnTree(x, y);
+                if(x % 12 === 0 && Math.random() > 0.4) spawnTree(x, surf);
             }
         }
     }
@@ -111,7 +111,11 @@ function spawnTree(x, y) {
     let h = 5 + Math.floor(Math.random()*4);
     for(let i=1; i<=h; i++) if(y-i > 0) treeWorld[y-i][x] = 4;
     for(let ly=-3; ly<=0; ly++) for(let lx=-2; lx<=2; lx++)
-        if(Math.abs(lx)+Math.abs(ly+1) < 4) treeWorld[y-h+ly][x+lx] = 5;
+        if(y-h+ly > 0 && Math.abs(lx)+Math.abs(ly+1) < 4) treeWorld[y-h+ly][x+lx] = 5;
+}
+
+function spawnSlime(x, y) {
+    entities.push({ x, y, w: 28, h: 20, vx: 0, vy: 0, hp: 40, color: "#2ecc71" });
 }
 
 function updateLight() {
@@ -125,7 +129,7 @@ function updateLight() {
     }
 }
 
-/** LOGICA **/
+/** FISICA E LOGICA **/
 function isSolid(x, y) {
     const gx = Math.floor(x/TILE_SIZE), gy = Math.floor(y/TILE_SIZE);
     return world[gy] && world[gy][gx] !== 0;
@@ -139,7 +143,7 @@ function spawnDrop(x, y, id) {
 function update() {
     gameTime = (gameTime + 1) % DAY_LENGTH;
     
-    // Player Physics
+    // Player
     player.vx = keys['KeyA'] ? -5 : keys['KeyD'] ? 5 : 0;
     player.vy += 0.5;
     player.x += player.vx;
@@ -151,35 +155,72 @@ function update() {
         if(keys['Space'] || keys['KeyW']) player.vy = -10.5;
     }
 
-    // Interação (Mineração com Delay e Construção)
-    const gx = Math.floor((mouse.x + camera.x)/TILE_SIZE);
-    const gy = Math.floor((mouse.y + camera.y)/TILE_SIZE);
-    const dist = Math.hypot((mouse.x+camera.x)-(player.x+10), (mouse.y+camera.y)-(player.y+18));
+    // Interação (Blocos, Árvores e Mobs)
+    const mx = mouse.x + camera.x;
+    const my = mouse.y + camera.y;
+    const gx = Math.floor(mx/TILE_SIZE);
+    const gy = Math.floor(my/TILE_SIZE);
+    const dist = Math.hypot(mx-(player.x+10), my-(player.y+18));
 
-    if(dist < REACH && world[gy]) {
-        if(mouse.down && world[gy][gx] !== 0) { // Mineração
-            worldDmg[gy][gx]--;
-            if(worldDmg[gy][gx] <= 0) {
-                spawnDrop(gx*40, gy*40, world[gy][gx]);
-                world[gy][gx] = 0;
-                updateLight();
-                updateUI();
+    if(mouse.down) {
+        // Atacar Mobs
+        entities.forEach(en => {
+            if(Math.hypot(en.x - mx, en.y - my) < 30) en.hp -= 2;
+        });
+
+        // Quebrar Coisas
+        if(dist < REACH && gy >= 0 && gy < WORLD_ROWS) {
+            if(world[gy][gx] !== 0) { // Quebrar blocos
+                worldDmg[gy][gx]--;
+                if(worldDmg[gy][gx] <= 0) {
+                    spawnDrop(gx*40, gy*40, world[gy][gx]);
+                    world[gy][gx] = 0;
+                    updateLight();
+                }
+            } else if(treeWorld[gy][gx] !== 0) { // Quebrar árvores
+                spawnDrop(gx*40, gy*40, treeWorld[gy][gx]);
+                treeWorld[gy][gx] = 0;
             }
         }
-        if(mouse.rightDown && world[gy][gx] === 0 && player.inv[player.selected] > 0) { // Construção
+    }
+
+    if(mouse.rightDown && dist < REACH && world[gy] && world[gy][gx] === 0 && treeWorld[gy][gx] === 0) {
+        if(player.inv[player.selected] > 0) {
             world[gy][gx] = player.selected;
             worldDmg[gy][gx] = DURABILITY[player.selected];
             player.inv[player.selected]--;
             updateLight();
-            updateUI();
         }
     }
 
-    // Drops Physics & Collection
+    // Mobs (Slimes)
+    entities.forEach((en, i) => {
+        en.vy += 0.4;
+        en.x += en.vx;
+        en.y += en.vy;
+        
+        if(isSolid(en.x, en.y+en.h) || isSolid(en.x+en.w, en.y+en.h)) {
+            en.y = Math.floor((en.y+en.h)/40)*40 - en.h;
+            en.vy = -7; // Pulo do slime
+            en.vx = (player.x > en.x) ? 2 : -2;
+        }
+        
+        // Dano no player
+        if(Math.abs(player.x - en.x) < 20 && Math.abs(player.y - en.y) < 20) {
+            player.hp -= 0.5;
+            player.vx += (player.x > en.x ? 5 : -5);
+        }
+        if(en.hp <= 0) entities.splice(i, 1);
+    });
+
+    if(Math.random() < 0.005 && entities.length < 5) {
+        spawnSlime(player.x + (Math.random()-0.5)*1000, player.y - 400);
+    }
+
+    // Drops & Camera
     drops.forEach((d, i) => {
         d.vy += 0.2; d.x += d.vx; d.y += d.vy;
         if(isSolid(d.x, d.y+10)) { d.vy = 0; d.vx *= 0.8; d.y = Math.floor((d.y+10)/40)*40-10; }
-        // Atração magnética
         let distP = Math.hypot(player.x-d.x, player.y-d.y);
         if(distP < 80) { d.vx += (player.x-d.x)*0.05; d.vy += (player.y-d.y)*0.05; }
         if(distP < 20) { player.inv[d.id] = (player.inv[d.id]||0)+1; drops.splice(i,1); updateUI(); }
@@ -188,12 +229,13 @@ function update() {
     camera.x += (player.x - canvas.width/2 - camera.x) * 0.1;
     camera.y += (player.y - canvas.height/2 - camera.y) * 0.1;
 
+    if(player.hp <= 0) { alert("Você morreu!"); location.reload(); }
+    
     draw();
     requestAnimationFrame(update);
 }
 
 function draw() {
-    // Fundo
     const d = Math.sin((gameTime/DAY_LENGTH)*Math.PI);
     ctx.fillStyle = `rgb(0, ${80*d + 20}, ${180*d + 40})`;
     ctx.fillRect(0,0,canvas.width, canvas.height);
@@ -216,30 +258,38 @@ function draw() {
         }
     }
 
-    // Drops
+    entities.forEach(en => { ctx.fillStyle = en.color; ctx.fillRect(en.x, en.y, en.w, en.h); });
     drops.forEach(d => ctx.drawImage(tex[d.id], d.x+10, d.y+10, 20, 20));
-
-    // Player
+    
     ctx.fillStyle = "#e67e22";
     ctx.fillRect(player.x, player.y, player.w, player.h);
 
     ctx.restore();
     document.getElementById('hp-fill').style.width = player.hp + "%";
+    updateUI();
 }
 
 function updateUI() {
     const hotbar = document.getElementById('hotbar');
-    hotbar.innerHTML = '';
-    [1, 2, 3, 4, 6, 8].forEach(id => {
-        const slot = document.createElement('div');
-        slot.className = `slot ${player.selected === id ? 'selected' : ''}`;
-        slot.onclick = () => { player.selected = id; updateUI(); };
-        const icon = document.createElement('canvas'); icon.width=16; icon.height=16;
-        icon.getContext('2d').drawImage(tex[id],0,0);
-        slot.appendChild(icon);
-        slot.innerHTML += `<div class="count">${player.inv[id]||0}</div>`;
-        hotbar.appendChild(slot);
-    });
+    if(hotbar.children.length === 0) { // Só reconstrói se estiver vazio
+        [1, 2, 3, 4, 5, 6, 8].forEach(id => {
+            const slot = document.createElement('div');
+            slot.className = `slot ${player.selected === id ? 'selected' : ''}`;
+            slot.id = "slot-"+id;
+            slot.onclick = () => { player.selected = id; updateUI(); };
+            const icon = document.createElement('canvas'); icon.width=16; icon.height=16;
+            icon.getContext('2d').drawImage(tex[id],0,0);
+            slot.appendChild(icon);
+            slot.innerHTML += `<div class="count">${player.inv[id]||0}</div>`;
+            hotbar.appendChild(slot);
+        });
+    } else {
+        [1, 2, 3, 4, 5, 6, 8].forEach(id => {
+            const slot = document.getElementById("slot-"+id);
+            slot.className = `slot ${player.selected === id ? 'selected' : ''}`;
+            slot.querySelector('.count').innerText = player.inv[id]||0;
+        });
+    }
 }
 
 /** INPUTS **/
@@ -255,7 +305,6 @@ canvas.oncontextmenu = (e) => e.preventDefault();
 
 initTextures();
 initWorld();
-updateUI();
 update();
 </script>
 </body>
