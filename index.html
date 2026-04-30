@@ -2,91 +2,61 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Mini Terraria - Biomas Colossais</title>
+    <title>Mini Terraria Colossal - Versão Completa</title>
     <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            background: #000; 
-            font-family: 'Segoe UI', sans-serif; 
-        }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; user-select: none; }
+        canvas { display: block; cursor: crosshair; }
 
-        canvas { 
-            display: block; 
-            cursor: crosshair; 
+        .ui-container {
+            position: absolute; top: 10px; left: 10px; z-index: 100;
+            display: flex; flex-direction: column; gap: 10px;
         }
 
         .info { 
-            position: absolute; 
-            top: 10px; 
-            left: 10px; 
-            color: white; 
-            text-shadow: 1px 1px 2px black; 
-            background: rgba(0,0,0,0.5); 
-            padding: 12px; 
-            border-radius: 8px;
-            pointer-events: none; 
-            z-index: 10;
+            color: white; text-shadow: 1px 1px 2px black; 
+            background: rgba(0,0,0,0.6); padding: 10px; border-radius: 8px;
+            font-size: 14px; border: 1px solid #444;
         }
 
+        #hp-bar {
+            width: 200px; height: 20px; background: #333; 
+            border: 2px solid #fff; border-radius: 4px; overflow: hidden;
+        }
+        #hp-fill { width: 100%; height: 100%; background: #ff4757; transition: width 0.2s; }
+
         #inventory-ui {
-            position: absolute; 
-            bottom: 20px; 
-            left: 50%;
-            transform: translateX(-50%); 
-            display: flex; 
-            gap: 8px;
-            background: rgba(0, 0, 0, 0.7); 
-            padding: 10px;
-            border-radius: 12px; 
-            border: 2px solid #444; 
-            z-index: 100;
+            position: absolute; bottom: 20px; left: 50%;
+            transform: translateX(-50%); display: flex; gap: 8px;
+            background: rgba(0, 0, 0, 0.8); padding: 12px;
+            border-radius: 12px; border: 2px solid #555; z-index: 100;
         }
 
         .slot {
-            width: 45px; 
-            height: 45px; 
-            background: #333;
-            border: 2px solid #666; 
-            border-radius: 4px;
-            display: flex; 
-            align-items: center; 
-            justify-content: center;
-            position: relative;
+            width: 50px; height: 50px; background: #333;
+            border: 2px solid #666; border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            position: relative; transition: 0.1s;
         }
 
-        .slot.selected { 
-            border-color: #fff; 
-            box-shadow: 0 0 10px #fff; 
-            background: #555; 
-        }
-
-        .slot canvas { width: 30px; height: 30px; image-rendering: pixelated; }
-        .count { position: absolute; bottom: 2px; right: 4px; color: white; font-size: 10px; font-weight: bold; }
+        .slot.selected { border-color: #fff; box-shadow: 0 0 15px rgba(255,255,255,0.3); background: #444; }
+        .slot canvas { width: 32px; height: 32px; image-rendering: pixelated; }
+        .count { position: absolute; bottom: 2px; right: 5px; color: white; font-size: 12px; font-weight: bold; }
 
         #minimap-container {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            width: 200px;
-            height: 150px;
-            border: 2px solid #888;
-            background: rgba(0, 0, 0, 0.8);
-            border-radius: 5px;
-            overflow: hidden;
-            z-index: 100;
-            box-shadow: 0 0 10px rgba(0,0,0,0.8);
+            position: absolute; top: 10px; right: 10px;
+            width: 200px; height: 150px; border: 2px solid #888;
+            background: rgba(0, 0, 0, 0.8); border-radius: 8px;
+            overflow: hidden; z-index: 100;
         }
-        #minimap {
-            width: 100%;
-            height: 100%;
-            image-rendering: pixelated;
-        }
+        #minimap { width: 100%; height: 100%; image-rendering: pixelated; }
     </style>
 </head>
 <body>
 
-<div class="info" id="debug-info">Gerando Biomas Colossais...</div>
+<div class="ui-container">
+    <div id="hp-bar"><div id="hp-fill"></div></div>
+    <div class="info" id="debug-info">Inicializando mundo...</div>
+</div>
 
 <div id="minimap-container">
     <canvas id="minimap"></canvas>
@@ -98,11 +68,13 @@
     <div class="slot" id="slot-3"><div class="count">0</div></div>
     <div class="slot" id="slot-4"><div class="count">0</div></div>
     <div class="slot" id="slot-6"><div class="count">0</div></div>
+    <div class="slot" id="slot-8"><div class="count">0</div></div>
 </div>
 
 <canvas id="gameCanvas"></canvas>
 
 <script>
+/** CONFIGURAÇÕES E VARIÁVEIS GLOBAIS **/
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
@@ -110,26 +82,20 @@ canvas.height = window.innerHeight;
 
 const minimapCanvas = document.getElementById('minimap');
 const minimapCtx = minimapCanvas.getContext('2d');
-const MINIMAP_WIDTH = 200;
-const MINIMAP_HEIGHT = 150;
-const MINIMAP_SCALE = 4; 
-
-minimapCanvas.width = MINIMAP_WIDTH;
-minimapCanvas.height = MINIMAP_HEIGHT;
 
 const TILE_SIZE = 40;
-const WORLD_WIDTH_PX = 600000; // Seu mundo colossal original
+const WORLD_WIDTH_PX = 600000; 
 const WORLD_COLS = Math.floor(WORLD_WIDTH_PX / TILE_SIZE);
-const WORLD_ROWS = 90;
+const WORLD_ROWS = 95;
 const REACH_DISTANCE = TILE_SIZE * 5;
 
-// IDs: 1:Grama, 2:Terra, 3:Pedra, 4:Madeira, 5:Folha, 6:Areia, 7:Água, 8:Ferro, 9:Carvão
-const DURABILITY = { 1: 15, 2: 15, 3: 40, 4: 25, 5: 10, 6: 12, 7: 999, 8: 60, 9: 45 };
-
-let gameTime = 2000;
-const DAY_LENGTH = 15000;
+const DURABILITY = { 1: 15, 2: 15, 3: 45, 4: 25, 5: 10, 6: 12, 8: 70, 9: 50 };
 const tex = {};
+let world = [], worldDamage = [], treeWorld = [], particles = [];
+let gameTime = 3000;
+const DAY_LENGTH = 18000;
 
+/** INICIALIZAÇÃO DE TEXTURAS **/
 function initTextures() {
     const colors = {
         1: ["#4caf50", "#2e7d32", "grass"], 2: ["#795548", "#5d4037", "block"],
@@ -152,13 +118,12 @@ function initTextures() {
     }
 }
 
-let world = [], worldDamage = [], treeWorld = [];
-
+/** GERAÇÃO DE MUNDO **/
 function getBiome(x) {
-    if (x < 1500 || x > WORLD_COLS - 1500) return "OCEANO";
-    const v = Math.sin(x * 0.01);
-    if (v > 0.65) return "AMAZONIA";
-    if (v < -0.65) return "DESERTO";
+    if (x < 1200 || x > WORLD_COLS - 1200) return "OCEANO";
+    const v = Math.sin(x * 0.015);
+    if (v > 0.7) return "AMAZONIA";
+    if (v < -0.7) return "DESERTO";
     return "FLORESTA";
 }
 
@@ -171,31 +136,18 @@ function initWorld() {
 
     for (let x = 0; x < WORLD_COLS; x++) {
         const biome = getBiome(x);
-        let surfaceY;
-        if (biome === "OCEANO") surfaceY = 58 + Math.floor(Math.sin(x * 0.04) * 4);
-        else if (biome === "DESERTO") surfaceY = 42 + Math.floor(Math.sin(x * 0.06) * 3);
-        else if (biome === "AMAZONIA") surfaceY = 28 + Math.floor(Math.sin(x * 0.09) * 11);
-        else surfaceY = 35 + Math.floor(Math.sin(x * 0.08) * 6);
-
-        surfaceY = Math.max(15, Math.min(WORLD_ROWS - 30, surfaceY));
+        let surfaceY = 40 + Math.floor(Math.sin(x * 0.08) * 6);
+        if (biome === "OCEANO") surfaceY = 60 + Math.floor(Math.sin(x * 0.04) * 3);
+        if (biome === "DESERTO") surfaceY = 45 + Math.floor(Math.sin(x * 0.05) * 4);
+        if (biome === "AMAZONIA") surfaceY = 30 + Math.floor(Math.sin(x * 0.1) * 8);
 
         for (let y = 0; y < WORLD_ROWS; y++) {
-            if (y < surfaceY) {
-                world[y][x] = 0;
-                continue;
-            }
+            if (y < surfaceY) continue;
             let type = 3; 
-            if (y === surfaceY) {
-                type = (biome === "OCEANO") ? 7 : (biome === "DESERTO" ? 6 : 1);
-            } else if (y < surfaceY + 8) {
-                type = (biome === "DESERTO") ? 6 : 2;
-            } else if (y < surfaceY + 25) {
-                type = 2;
-            } else if (y > surfaceY + 40 && Math.random() < 0.02) {
-                type = 8;
-            } else if (y > surfaceY + 50 && Math.random() < 0.03) {
-                type = 9;
-            }
+            if (y === surfaceY) type = (biome === "OCEANO") ? 7 : (biome === "DESERTO" ? 6 : 1);
+            else if (y < surfaceY + 7) type = (biome === "DESERTO") ? 6 : 2;
+            else if (y > surfaceY + 20 && Math.random() < 0.015) type = 8; // Ferro
+            
             world[y][x] = type;
             worldDamage[y][x] = DURABILITY[type] || 0;
         }
@@ -204,23 +156,19 @@ function initWorld() {
 }
 
 function generateTrees() {
-    for (let x = 10; x < WORLD_COLS - 10; x += Math.floor(Math.random() * 12) + 8) {
-        if (Math.random() > 0.4 && (getBiome(x) === "FLORESTA" || getBiome(x) === "AMAZONIA")) {
+    for (let x = 20; x < WORLD_COLS - 20; x += Math.floor(Math.random() * 10) + 5) {
+        const biome = getBiome(x);
+        if ((biome === "FLORESTA" || biome === "AMAZONIA") && Math.random() < 0.5) {
             let groundY = -1;
-            for (let y = 0; y < WORLD_ROWS; y++) {
-                if (world[y][x] === 1) { groundY = y; break; }
-            }
-            if (groundY > 15) {
-                let h = (getBiome(x) === "AMAZONIA" ? 10 : 4) + Math.floor(Math.random() * 4);
-                for (let i = 1; i <= h; i++) {
-                    if (groundY - i >= 0) treeWorld[groundY - i][x] = 4;
-                }
+            for (let y = 0; y < WORLD_ROWS; y++) if (world[y][x] === 1) { groundY = y; break; }
+            if (groundY > 10) {
+                let h = (biome === "AMAZONIA" ? 12 : 5) + Math.floor(Math.random() * 3);
+                for (let i = 1; i <= h; i++) treeWorld[groundY - i][x] = 4;
                 let leafY = groundY - h;
                 for (let ly = -3; ly <= 0; ly++) {
                     for (let lx = -2; lx <= 2; lx++) {
-                        if (Math.abs(lx) + Math.abs(ly + 1) < 4) {
-                            if (treeWorld[leafY + ly] && (leafY + ly) >= 0) treeWorld[leafY + ly][x + lx] = 5;
-                        }
+                        if (Math.abs(lx) + Math.abs(ly + 1) < 4 && treeWorld[leafY + ly]) 
+                            treeWorld[leafY + ly][x + lx] = 5;
                     }
                 }
             }
@@ -228,8 +176,14 @@ function generateTrees() {
     }
 }
 
-const player = { x: 80000, y: 0, w: 20, h: 36, vx: 0, vy: 0, speed: 6, jump: -12, onGround: false };
-let inventory = { 1: 50, 2: 50, 3: 0, 4: 50, 6: 50, 8: 0, 9: 0 };
+/** JOGADOR E MECÂNICAS **/
+const player = { 
+    x: 80000, y: 0, w: 20, h: 38, vx: 0, vy: 0, 
+    speed: 6, jump: -11, onGround: false, 
+    hp: 100, maxHp: 100, lastVy: 0 
+};
+
+let inventory = { 1: 10, 2: 10, 3: 0, 4: 0, 6: 0, 8: 0 };
 let selectedSlot = 1;
 const keys = {};
 const camera = { x: 0, y: 0 };
@@ -242,9 +196,20 @@ function isSolid(px, py) {
     return world[gy][gx] !== 0 && world[gy][gx] !== 7;
 }
 
+function spawnParticles(x, y, color) {
+    for(let i=0; i<6; i++) {
+        particles.push({
+            x, y, 
+            vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5, 
+            life: 25, color
+        });
+    }
+}
+
+/** INPUTS **/
 window.onkeydown = (e) => { 
     keys[e.code] = true; 
-    if (["1","2","3","4","6"].includes(e.key)) { selectedSlot = parseInt(e.key); updateUI(); } 
+    if (["1","2","3","4","6","8"].includes(e.key)) { selectedSlot = parseInt(e.key); updateUI(); } 
 };
 window.onkeyup = (e) => keys[e.code] = false;
 canvas.onmousedown = (e) => { if (e.button === 0) isMouseDown = true; if (e.button === 2) isRightMouseDown = true; };
@@ -252,66 +217,51 @@ window.onmouseup = () => { isMouseDown = false; isRightMouseDown = false; };
 canvas.onmousemove = (e) => { mousePos.x = e.clientX + camera.x; mousePos.y = e.clientY + camera.y; };
 canvas.oncontextmenu = (e) => e.preventDefault();
 
-function updateMinimap() {
-    minimapCtx.fillStyle = "#000";
-    minimapCtx.fillRect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT);
-    const pX = Math.floor(player.x / TILE_SIZE), pY = Math.floor(player.y / TILE_SIZE);
-    const startX = pX - Math.floor(MINIMAP_WIDTH / (2 * MINIMAP_SCALE));
-    const startY = pY - Math.floor(MINIMAP_HEIGHT / (2 * MINIMAP_SCALE));
-
-    for (let my = 0; my < MINIMAP_HEIGHT; my++) {
-        for (let mx = 0; mx < MINIMAP_WIDTH; mx++) {
-            const wx = startX + Math.floor(mx / MINIMAP_SCALE);
-            const wy = startY + Math.floor(my / MINIMAP_SCALE);
-            if (wx >= 0 && wx < WORLD_COLS && wy >= 0 && wy < WORLD_ROWS) {
-                const tile = world[wy][wx];
-                const tree = treeWorld[wy][wx];
-                if (tree !== 0) minimapCtx.fillStyle = tree === 4 ? "#8B4513" : "#228B22";
-                else if (tile === 0) minimapCtx.fillStyle = "#1a1a2e";
-                else if (tile === 1) minimapCtx.fillStyle = "#4caf50";
-                else if (tile === 2) minimapCtx.fillStyle = "#795548";
-                else if (tile === 3) minimapCtx.fillStyle = "#9e9e9e";
-                else if (tile === 6) minimapCtx.fillStyle = "#f4d03f";
-                else if (tile === 7) minimapCtx.fillStyle = "#3498db";
-                else minimapCtx.fillStyle = "#333";
-                minimapCtx.fillRect(mx, my, 1, 1);
-            }
-        }
-    }
-    minimapCtx.fillStyle = "#FF0000";
-    minimapCtx.fillRect(MINIMAP_WIDTH/2 - 2, MINIMAP_HEIGHT/2 - 2, 5, 5);
-}
-
+/** LOOP PRINCIPAL **/
 function update() {
     gameTime = (gameTime + 1) % DAY_LENGTH;
+    
+    // Movimento
     player.vx = keys['KeyA'] ? -player.speed : keys['KeyD'] ? player.speed : 0;
     player.x = Math.max(0, Math.min(player.x + player.vx, WORLD_WIDTH_PX - player.w));
 
+    // Colisão Horizontal
     if (isSolid(player.x, player.y + 5) || isSolid(player.x + player.w, player.y + 5) ||
         isSolid(player.x, player.y + player.h - 5) || isSolid(player.x + player.w, player.y + player.h - 5)) {
         if (player.vx > 0) player.x = Math.floor((player.x + player.w) / TILE_SIZE) * TILE_SIZE - player.w - 0.1;
         else if (player.vx < 0) player.x = Math.floor(player.x / TILE_SIZE) * TILE_SIZE + TILE_SIZE + 0.1;
     }
 
-    player.vy += 0.6;
+    // Gravidade e Pulo
+    player.vy += 0.55;
     player.y += player.vy;
     player.onGround = false;
+
     if (isSolid(player.x + 2, player.y + player.h) || isSolid(player.x + player.w - 2, player.y + player.h)) {
+        // Dano de Queda
+        if (player.vy > 16) {
+            player.hp -= Math.floor(player.vy * 1.5);
+            spawnParticles(player.x, player.y + player.h, "#ff0000");
+        }
         player.y = Math.floor((player.y + player.h) / TILE_SIZE) * TILE_SIZE - player.h;
         player.vy = 0; player.onGround = true;
     }
     if (player.onGround && (keys['Space'] || keys['KeyW'])) player.vy = player.jump;
 
+    // Interação com Blocos
     const gx = Math.floor(mousePos.x / TILE_SIZE), gy = Math.floor(mousePos.y / TILE_SIZE);
     if (Math.hypot(mousePos.x - (player.x + 10), mousePos.y - (player.y + 18)) <= REACH_DISTANCE && world[gy]) {
         if (isMouseDown) {
             if (world[gy][gx] !== 0 && world[gy][gx] !== 7) {
                 worldDamage[gy][gx]--;
+                if(Math.random() > 0.7) spawnParticles(mousePos.x, mousePos.y, "#fff");
                 if(worldDamage[gy][gx] <= 0) { 
-                    inventory[world[gy][gx]]++; world[gy][gx] = 0; updateUI(); 
+                    inventory[world[gy][gx]] = (inventory[world[gy][gx]] || 0) + 1;
+                    world[gy][gx] = 0; updateUI(); 
                 }
             } else if (treeWorld[gy][gx] !== 0) {
-                inventory[treeWorld[gy][gx]]++; treeWorld[gy][gx] = 0; updateUI();
+                inventory[treeWorld[gy][gx]] = (inventory[treeWorld[gy][gx]] || 0) + 1;
+                treeWorld[gy][gx] = 0; updateUI();
             }
         }
         if (isRightMouseDown && world[gy][gx] === 0 && treeWorld[gy][gx] === 0 && inventory[selectedSlot] > 0) {
@@ -321,19 +271,34 @@ function update() {
         }
     }
 
+    // Partículas
+    for(let i = particles.length-1; i>=0; i--) {
+        particles[i].x += particles[i].vx;
+        particles[i].y += particles[i].vy;
+        particles[i].life--;
+        if(particles[i].life <= 0) particles.splice(i, 1);
+    }
+
+    // Câmera
     camera.x += (player.x - canvas.width / 2 - camera.x) * 0.1;
     camera.y += (player.y - canvas.height / 2 - camera.y) * 0.1;
     camera.x = Math.max(0, Math.min(camera.x, WORLD_WIDTH_PX - canvas.width));
 
-    document.getElementById('debug-info').innerText = `X: ${Math.floor(player.x)} | Bioma: ${getBiome(Math.floor(player.x/TILE_SIZE))} | Bloco Selecionado: ${selectedSlot}`;
-    updateMinimap();
+    // UI
+    document.getElementById('hp-fill').style.width = Math.max(0, player.hp) + "%";
+    document.getElementById('debug-info').innerText = `X: ${Math.floor(player.x)} | Bioma: ${getBiome(Math.floor(player.x/TILE_SIZE))}`;
+    
+    if(gameTime % 20 === 0) updateMinimap();
     draw();
     requestAnimationFrame(update);
 }
 
+/** RENDERIZAÇÃO **/
 function draw() {
     let dayRatio = Math.sin((gameTime / DAY_LENGTH) * Math.PI * 2); 
-    ctx.fillStyle = `rgb(0, ${Math.max(10, 60 + dayRatio * 100)}, ${Math.max(20, 100 + dayRatio * 155)})`;
+    let skyB = Math.max(20, 100 + dayRatio * 155);
+    let skyG = Math.max(10, 60 + dayRatio * 100);
+    ctx.fillStyle = `rgb(0, ${skyG}, ${skyB})`;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
@@ -348,31 +313,64 @@ function draw() {
         }
     }
 
+    // Partículas
+    particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life / 25;
+        ctx.fillRect(p.x, p.y, 4, 4);
+    });
+    ctx.globalAlpha = 1;
+
+    // Player
     ctx.fillStyle = "#ff5722";
     ctx.fillRect(player.x, player.y, player.w, player.h);
+    
     ctx.restore();
 
-    let nightOpacity = Math.max(0, -dayRatio * 0.65);
+    // Overlay Noturno
+    let nightOpacity = Math.max(0, -dayRatio * 0.7);
     ctx.fillStyle = `rgba(0, 0, 30, ${nightOpacity})`;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
+function updateMinimap() {
+    minimapCtx.fillStyle = "#000";
+    minimapCtx.fillRect(0, 0, 200, 150);
+    const pX = Math.floor(player.x / TILE_SIZE), pY = Math.floor(player.y / TILE_SIZE);
+    
+    for (let my = 0; my < 150; my += 2) {
+        for (let mx = 0; mx < 200; mx += 2) {
+            const wx = pX - 100 + mx;
+            const wy = pY - 75 + my;
+            if (wx >= 0 && wx < WORLD_COLS && wy >= 0 && wy < WORLD_ROWS) {
+                const tile = world[wy][wx];
+                if (tile !== 0) {
+                    minimapCtx.fillStyle = tile === 1 ? "#4caf50" : (tile === 7 ? "#3498db" : "#555");
+                    minimapCtx.fillRect(mx, my, 2, 2);
+                }
+            }
+        }
+    }
+    minimapCtx.fillStyle = "red";
+    minimapCtx.fillRect(100, 75, 4, 4);
+}
+
 function updateUI() {
-    [1, 2, 3, 4, 6].forEach(id => {
-        const slot = document.getElementById(`slot-${id === 6 ? 6 : id}`);
-        const finalSlot = id === 6 ? document.getElementById('slot-6') : document.getElementById(`slot-${id}`);
-        if(!finalSlot) return;
-        finalSlot.querySelector('.count').innerText = inventory[id] || 0;
-        finalSlot.classList.toggle('selected', selectedSlot === id);
-        if (!finalSlot.querySelector('canvas') && tex[id]) {
+    [1, 2, 3, 4, 6, 8].forEach(id => {
+        const slot = document.getElementById(`slot-${id}`);
+        if(!slot) return;
+        slot.querySelector('.count').innerText = inventory[id] || 0;
+        slot.classList.toggle('selected', selectedSlot === id);
+        if (!slot.querySelector('canvas') && tex[id]) {
             const icon = document.createElement('canvas'); 
             icon.width = 16; icon.height = 16;
             icon.getContext('2d').drawImage(tex[id], 0, 0); 
-            finalSlot.appendChild(icon);
+            slot.appendChild(icon);
         }
     });
 }
 
+// Iniciar
 initTextures();
 initWorld();
 updateUI();
